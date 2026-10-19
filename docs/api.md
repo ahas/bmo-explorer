@@ -20,7 +20,8 @@ another repository reaches it through nothing else, and it reaches another repos
   keeps its own folder in it, `explorer/`, and reads no other (docs/store.md).
 - **The settings** stand in `explorer/settings.toml` under the data root:
   - `[units]`: the base address and the bearer token of each service it calls, `agency` and `agency_token`,
-    `receiver` and `receiver_token`, `artifact` and `artifact_token`, `node` and `node_token`. A call whose
+    `receiver` and `receiver_token`, `artifact` and `artifact_token`, `gate` and `gate_token`, `node` and
+    `node_token`. A call whose
     address is unset is refused with an English sentence naming the setting; a token unset goes with none, and
     the service refuses it as it refuses any call without its token.
   - `[remote_browser]`: the debugging port and the profile a remote browser lands on where its steps name
@@ -67,8 +68,8 @@ repository's own (`testbed.toml`, its deploy steps). The host's call protocol is
   - `remote_browser` takes `node` (required), the node by its name in the node list; `plan` (required), the
     steps as a steps file holds them; `secrets`, `NAME=value` lines; `mode`, `chat` and `message` as `browse`
     takes them.
-  - The launch answers `run_started` with `room` (and `node`, for a remote browser), never a sentence for the
-    room.
+  - An async launch answers one English line for the agent naming the run's unit and the room it reports to,
+    never a sentence for the room; a sync launch answers the run's ending.
 
 ### The explorer entries
 
@@ -120,20 +121,28 @@ standard error, and ends 0 where it did what was asked, 1 where it refused, and 
 | Noun | Also run as | Words |
 |---|---|---|
 | `browse` | | `browse --chat <chatId> [--by <who>] [--via <road>] [--mode <sync\|async>]`, the task on standard input, with the login its holder offered after it on a line of its own that names it as such |
-| `runner browse` | `browse-runner` | `runner browse <chatId> <taskFile> [runId] [unit] [profile] [--kept-on <registration>]` |
+| `runner browse` | `browse-runner` | `runner browse <chatId> <taskFile> [runId] [unit] [profile] [--kept-on <registration>] [--via <road>] [--ending <file>]` |
 | `remote-browser` | | `remote-browser --chat <chatId> --by chat:<chatId> [--via <road>] [--mode <sync\|async>] --node <name> --steps <file>`, the secrets the steps name on standard input as `NAME=value` lines |
 | `runner remote-browser` | `remote-browser-runner` | `runner remote-browser <chatId> <taskFile> [runId] [unit]` |
 | `tool unread-pages` | `unread-pages` | `tool unread-pages`, the pages no road read, a site at a time (docs/site-contract.md, "A page the searcher could not read") |
 
 - **`browse` and `remote-browser` launch:** each refuses before anything is opened where its words or its input
   do not hold, opens the run's row in bmo-agency's run ledger, writes the task for the runner to a file only
-  its owner reads, and has bmo-agency launch the runner. With `--mode async`, or none, it answers once the
-  runner is launched; with `--mode sync` it waits for the run's ending and prints it, however long the run takes.
+  its owner reads, and has bmo-agency launch the runner, under the title `browse for chat <chatId>`. With
+  `--mode async`, or none, it answers once the runner is launched; with `--mode sync` it hands the runner a
+  file only its owner reads, `--ending`, waits until bmo-agency's ledger holds the run closed, and prints the
+  ending the runner wrote there, however long the run takes. A launch whose runner did not come up takes its
+  files away and has its row closed as `error`.
 - **The runners are what bmo-agency launches,** never a person. Each reads its task file and deletes it, carries
   the run, closes the run's row with how it ended, and hands the ending to the agent that asked as a quiet
-  instruction. A stop signal (`SIGTERM` or `SIGINT`) stops the run, and the stop is handed back as its ending.
-- **The outcomes a run is closed with:** `done`, `failed`, `stopped`, `live-tasks` for a browse that ended with
-  its own work still running, and `error` for a run that never came up.
+  instruction, or writes it to the `--ending` file a sync launch waits on. A stop signal (`SIGTERM` or
+  `SIGINT`) stops the run, and the stop is handed back as its ending.
+- **What a runner is handed by its launcher,** in the environment bmo-agency starts it with: `BMO_DATA_DIR`,
+  the data root its settings stand under, and `BMO_TURN_AGENT`, the agent whose turn asked, which its ending
+  goes back to.
+- **The outcomes a run is closed with:** `done`, `failed`, `stopped`, `cut-short` for a browse its clock ended,
+  `live-tasks` for a browse that ended with its own work still running, and `error` for a run that never came
+  up.
 
 ## What this repository calls
 
@@ -145,25 +154,48 @@ standard error, and ends 0 where it did what was asked, 1 where it refused, and 
   (`finished_at`, `outcome`, `context_tokens?`), a run already closed keeping its first closing. A browse run is
   opened under the agent `browse` and a remote browser under the agent `remote-browser`, with their times in
   epoch seconds as the ledger keeps them.
-- **The run's clock.** A browse run past its ceiling is asked about rather than cut (bmo-agency's
-  `docs/agent-control.md`, "A clock asks before it cuts"): `GET /runs/clock?run=<name>` reads the bound and any
-  keep standing on it.
-- **The run apart.** A browse run's model session is a run apart: `POST /apart` starts it (`agent`, `line`,
-  `title`, `work_key`, `road`, `instructions`, `environment`, `prompt`, `log?`), `GET /apart/{id}` reads it
-  until it is no longer `running`, and `POST /apart/{id}/stop` stops it the moment the run is stopped.
+- **A run's state.** `GET /runs/{id}` reads a run, for a sync launch waiting on its close; `POST /runs/alive`
+  (`names`) answers which units still run, so a launch reclaims only the pool places of a run closed and gone.
+- **The road a browse goes out on.** `GET /providers` (the first enabled one carrying the `browse` line),
+  `GET /tiers/assignments` and `GET /tiers` (the `browse` key's tier), `POST /routes/resolve` (`work_key`,
+  `provider`, `tier`: the model and effort) and `POST /routes/check-effort`; or, for a launch made under a
+  registration that keeps its research, `GET /registrations/by-home?home=<home>`, the home read from the
+  launching process's `CLAUDE_CONFIG_DIR`.
+- **The run apart.** A browse run's model session is a run apart: `POST /apart` starts it (`agent` and `line`
+  `browse`, `title`, `work_key` `browse`, `road`, `instructions` named `browse`, `environment`, `prompt`,
+  `log?`, and `bound_ms`, the profile's total time), `GET /apart/{id}` reads it every half second until it is no
+  longer `running`, and `POST /apart/{id}/stop` stops it the moment the run is stopped. The environment carries
+  what the web tools are told (`BMO_RESEARCH_*` and `BMO_WEB_*`, docs/web-access.md, "Settings from the research
+  run") and, where the run has a display of its own, `BMO_BROWSE_DISPLAY`, `BMO_BROWSE_XAUTHORITY` and
+  `BMO_BROWSE_RUNTIME_DIR`, which the chrome-devtools server is shown on; headless where none is set.
+- **The run's clock** is bmo-agency's to keep: past `bound_ms` it asks before it cuts (bmo-agency's
+  `docs/agent-control.md`, "A clock asks before it cuts"), and a run apart it stopped past the ceiling ends the
+  browse as `cut-short`.
+- **A run counted.** `POST /agents/browse/runs`, as the run starts and again as it answers.
 - **The branches' seats.** A browse run whose profile opens branches reserves their seats in the co-worker pool
   before its clock starts, `POST /pool/reservations` (`reservation_key`, `owner`, `source`, `role`, `provider`,
   `model`, `effort?`, `tier`, `wanted`), and releases them however it ends,
-  `POST /pool/reservations/{token}/release` (`reason`). Its owner is `browse-run:<run>`. Each branch takes its
-  seat through the branch command (bmo-artifact, below).
+  `POST /pool/reservations/{token}/release` (`reason`), with every request of its own,
+  `POST /pool/requests/{token}/finish` (`outcome`, `cancel`). Its owner is `browse-run:<run>`. Each branch takes
+  its seat through the branch command (bmo-artifact, below). A launch first gives back what dead research runs
+  left: `GET /pool/reservations` and `GET /pool/requests`, each released or finished where its run is closed and
+  its unit no longer runs.
 - **A note in the run's log.** `POST /log/notes` (`agent`, `run`, `chat_id?`, `text`).
 - **A call that does not reach bmo-agency,** or an answer out of its shape, fails the run with the sentence why.
 
 ### bmo-receiver
 
 - **A run's ending** is queued as a quiet instruction for the agent that asked, in the room it asked in:
-  `POST /instructions` with an instruction as bmo-receiver's `docs/boundary-api.md` states it ("For bmo-job"),
-  `said` holding the ending as a fact and `run` naming the run. It answers `201` with the instruction's `id`.
+  `POST /instructions` with an instruction as bmo-receiver's `docs/boundary-api.md` states it ("For bmo-job"):
+  `agent`, the agent whose turn asked; `chat`; `said` holding the ending as an order; `sort` `browse`; `via`,
+  the road the question came in on; and `run` naming the run. It answers `201` with the instruction's `id`.
+
+### bmo-gate
+
+- **The knowledge a browse is handed.** `POST /knowledge/work` (`chat_id`, `lines`: the task as a quiet
+  instruction, without the login offered apart from it and with every credential shape masked) answers
+  `pieces`, each `path` and `text`, which stand after the run's request in the shape a turn's reference stands
+  in. A pick that fails costs the run its reference and nothing else.
 
 ### bmo-artifact
 
@@ -204,3 +236,10 @@ repository's worker:
   calls `bmo research-branch` and reads nothing of which unit answers it.
 - **bmo-cli:** `tool unread-pages` (`unread-pages`) is this repository's noun, read out of its own store; bmo-cli's
   `docs/boundary.md` lists it as not served yet.
+- **bmo-agency:** its `docs/api.md` states no run apart, though bmo-artifact's search runner and this
+  repository's browse runner both start one. It must serve `POST /apart`, `GET /apart/{id}` and
+  `POST /apart/{id}/stop` in the shapes 「bmo-agency」 above states, and for the `browse` line: compose the
+  instructions it keeps for it (`prompts/agents/browse/task.md`) with the chrome-devtools server, shown on the
+  display the run's environment names or headless, beside this repository's web tools; and hold the run to
+  `bound_ms`, asking before it cuts. The browse request, `prompts/agents/browse/request.md` in its tree, is this
+  repository's own prompt and stands here; its copy there is read by nothing.

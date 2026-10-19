@@ -16,11 +16,16 @@ is a browse, which this repository runs.
   (docs/api.md, 「The unit command」).
 - **The runner is a run apart** (docs/api.md, 「bmo-agency」) holding only the chrome-devtools browser
   tools and this repository's web tools, no persona. bmo-agency composes its program and its
-  instructions for the `browse` line; the task, the time it has and the knowledge its words call for
-  are its prompt. Every line its record gains is fed to its run log as it is written.
+  instructions for the `browse` line. Its prompt is this repository's request, which stands beside the
+  runner: the task between its markers as data, the time the run has, when research closes and what is
+  left to write in; and after it the knowledge bmo-gate picks for the task's words, asked without the
+  login offered apart from the task and with every credential shape masked. Every line its record gains is
+  fed to its run log as it is written.
 - **It opens the pages itself and hands what it saw back to the agent that asked** as a quiet
   instruction through bmo-receiver; the agent tells the room in its own voice, and until then neither
-  waits nor answers from memory. A `browse` called in sync takes that ending inside the call instead.
+  waits nor answers from memory. A `browse` called in sync takes that ending inside the call instead: its
+  runner writes the ending to a file only its owner reads, which the launch waits on until the run's row is
+  closed, and queues nothing at bmo-receiver.
 - **The task reaches the runner through a file** in the temporary directory, created owner-only and
   deleted the moment the runner has read it, never through a command line, because the task may carry
   credentials and arguments are visible in the process list.
@@ -35,8 +40,8 @@ is a browse, which this repository runs.
   can be a note about work still going; what it needs is a tail that always speaks, and it has one —
   a run whose unit is stopped out from under it reaches the agent as a failure like any other, and its
   ceiling is 「The browse clock」.
-- **How it ends:** `done`, `failed`, `stopped`, or `live-tasks` where it ended with its own work still
-  running; a launch that never came up is closed as `error`. The runner closes the run's row with it.
+- **How it ends:** `done`, `failed`, `stopped`, `cut-short` where its clock ended it, or `live-tasks` where
+  it ended with its own work still running; a launch that never came up is closed as `error`. The runner closes the run's row with it.
 
 ## The profile and the branches
 
@@ -60,9 +65,10 @@ is a browse, which this repository runs.
   - A request started before the deadline does not run past it either: searches, pages and host-gap
     waits take the deadline as their own deadline.
 - **At the ceiling** the agent is asked whether to keep the run or cut it, and the run goes on until it
-  answers (bmo-agency's `docs/agent-control.md`, 「A clock asks before it cuts」). Research has closed by
-  then, so a keep buys the result's writing. A cut — the agent's, or for want of an answer — ends the run
-  and salvages the last structured result.
+  answers (bmo-agency's `docs/agent-control.md`, 「A clock asks before it cuts」): the run apart is handed the
+  total time as its bound, and the ask is bmo-agency's. Research has closed by then, so a keep buys the
+  result's writing. A cut — the agent's, or for want of an answer — ends the run as `cut-short`, and the
+  agent is told the browsing failed and nothing more is coming.
 - **The wrap-up time** secures time for that salvaged result to be written; it does not replace the
   ceiling.
 
