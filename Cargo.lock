@@ -295,6 +295,7 @@ dependencies = [
  "chrono",
  "clap",
  "cookie",
+ "dotenvy",
  "ego-tree",
  "encoding_rs",
  "futures-util",
@@ -322,8 +323,10 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_xmlrpc",
+ "sha2",
  "simplecss",
  "sqlx",
+ "sse-stream",
  "tempfile",
  "tokio",
  "tokio-tungstenite",
@@ -3096,6 +3099,19 @@ dependencies = [
  "thiserror 2.0.21",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "sse-stream"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c25ac7aff0abd1dbc474536e40416e1102c7dd9bfba0b9861c6d357f835dcfb4"
+dependencies = [
+ "bytes",
+ "futures-util",
+ "http-body",
+ "http-body-util",
+ "pin-project-lite",
 ]
 
 [[package]]

@@ -26,6 +26,7 @@ bytes = "1.10.1"
 chrono = { version = "0.4.41", default-features = false, features = ["std"] }
 clap = { version = "4.5.40", features = ["derive"] }
 cookie = "0.18.1"
+dotenvy = "0.15.7"
 ego-tree = "0.10.0"
 encoding_rs = "0.8.42"
 futures-util = "0.3.34"
@@ -51,9 +52,11 @@ roxmltree = "0.21.1"
 schemars = "1.0.4"
 scraper = "0.25.0"
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+serde_json = { version = "1.0.140", features = ["raw_value"] }
 serde_xmlrpc = "0.3.0-alpha.2"
+sha2 = "0.10.9"
 simplecss = "0.2.2"
+sse-stream = "0.2.6"
 sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio"] }
 tempfile = "3.20.0"
 tokio = { version = "1.47.0", features = ["macros", "rt", "rt-multi-thread", "net", "time", "signal", "io-util", "process"] }
@@ -80,6 +83,8 @@ chrono.workspace = true
 # The unit command's words.
 clap.workspace = true
 cookie.workspace = true
+# A remote hub's token file, an environment file.
+dotenvy.workspace = true
 # A page's markup read as a tree, for what it is and the text a reader sees of it.
 ego-tree.workspace = true
 encoding_rs.workspace = true
@@ -113,6 +118,10 @@ serde_json.workspace = true
 serde_xmlrpc.workspace = true
 # An element's inline style read for where it places a piece of text.
 simplecss.workspace = true
+# The hash a remote browser's node helper is kept under.
+sha2.workspace = true
+# A remote hub's answer to an exec, an event stream.
+sse-stream.workspace = true
 # This repository's own store (docs/store.md).
 sqlx.workspace = true
 tokio.workspace = true

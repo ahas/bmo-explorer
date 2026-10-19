@@ -35,8 +35,9 @@ on a site of their own, such as a leave request, done without the owner at the k
 
 - A steps file is JSON: the list of steps alone, or an object carrying the list under `steps`
   beside `port`, the browser's debugging port, and `profile`, the name of the browser profile the
-  run uses. Both have defaults in the `[remote_browser]` settings — the port 9222, and a profile of the
-  deployment's naming — so a run keeps landing on the same browser, with the logins it already holds.
+  run uses. Both have defaults in the `[remote_browser]` settings, `port` and `profile` — 9222 and
+  `remote-browser` where a deployment names neither — so a run keeps landing on the same browser, with the
+  logins it already holds.
 - Each step is an object with its kind under `do`, and it may carry only the fields its kind takes;
   anything else refuses the whole file, naming the step.
   - `page` — `match` makes the page whose address or title holds those words the one the next steps
@@ -85,9 +86,10 @@ on a site of their own, such as a leave request, done without the owner at the k
   content's hash, in the agent user's own data directory, and a run whose node lacks that file sends
   it once, in the command's environment, before running it; a changed helper is a new file, so a node
   is never left running an old one. It runs under bun, or node 22 and later.
-- The helper is TypeScript in this repository, and what is shipped is its code with the types stripped
-  by bun's own transpiler, which the runner asks on the machine it runs on; the hash is taken of the
-  stripped code.
+- The helper is TypeScript in this repository, built into the `bmo-explorer` program, and what is
+  shipped is its code with the types stripped by bun's own transpiler, which the runner asks on the
+  machine it runs on (bun on `PATH`, or in the home's own `.bun/bin`); the hash is taken of the stripped
+  code.
 - The helper finds the browser on its debugging port and, where nothing answers there, starts it on
   its own profile: on a WSL node, Windows Edge through PowerShell, with the profile under the
   Windows user's local application data; on a Linux node, the first Edge or Chromium browser
@@ -111,6 +113,8 @@ on a site of their own, such as a leave request, done without the owner at the k
 
 - The runner keeps each screenshot under this repository's folder of the data root, in
   `explorer/remote-browser/`, in a folder named after the run's unit, readable by its owner alone.
+- A sync launch is handed the ending instead, in a file only its owner reads, which the launch prints once the
+  run's row is closed (docs/api.md, 「The unit command」).
 - It hands the agent that launched it one quiet instruction through bmo-receiver: the node, whether the
   browser was started or already running, every step with what it did and the address it ended on,
   every value read, the failure and its reason where there was one, the dialogs, the screenshot paths,

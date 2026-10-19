@@ -8,12 +8,20 @@ use std::process::ExitCode;
 
 use bmo_explorer::browse::launch::{AGENT_VARIABLE, Asked, HOME_VARIABLE, launch};
 use bmo_explorer::browse::runner::{Started, browse_runner};
+use bmo_explorer::remote_browser::{self, launch_remote_browser, remote_browser_runner};
 use bmo_explorer::settings::Settings;
 use bmo_explorer::tools::launching::Mode;
 use clap::{Args, Parser, Subcommand};
 
 /// The nouns this command carries, one a line, as `bmo` asks them.
-pub const NOUNS: &[&str] = &["browse", "runner browse", "browse-runner"];
+pub const NOUNS: &[&str] = &[
+  "browse",
+  "runner browse",
+  "browse-runner",
+  "remote-browser",
+  "runner remote-browser",
+  "remote-browser-runner",
+];
 
 #[derive(Parser)]
 #[command(
@@ -56,6 +64,29 @@ enum Verb {
   /// The run of a browse its launcher started.
   #[command(name = "browse-runner", allow_negative_numbers = true)]
   BrowseRunner(BrowseRunner),
+  /// Drive a browser on a remote node through a whole list of steps without holding up whoever asked; a secret the
+  /// steps name comes in on standard input as NAME=value lines.
+  #[command(name = "remote-browser", allow_negative_numbers = true)]
+  RemoteBrowser {
+    #[arg(long)]
+    chat: Option<i64>,
+    /// `chat:<chatId>`, who set it off.
+    #[arg(long, allow_hyphen_values = true)]
+    by: Option<String>,
+    #[arg(long)]
+    via: Option<String>,
+    #[arg(long)]
+    mode: Option<String>,
+    /// The node, by its name in the node list.
+    #[arg(long)]
+    node: Option<String>,
+    /// The file holding the steps.
+    #[arg(long)]
+    steps: Option<PathBuf>,
+  },
+  /// The run of a remote browser its launcher started.
+  #[command(name = "remote-browser-runner", allow_negative_numbers = true)]
+  RemoteBrowserRunner(RemoteBrowserRunner),
 }
 
 #[derive(Subcommand)]
@@ -63,6 +94,22 @@ enum Runner {
   /// The run of a browse its launcher started.
   #[command(allow_negative_numbers = true)]
   Browse(BrowseRunner),
+  /// The run of a remote browser its launcher started.
+  #[command(name = "remote-browser", allow_negative_numbers = true)]
+  RemoteBrowser(RemoteBrowserRunner),
+}
+
+#[derive(Args)]
+struct RemoteBrowserRunner {
+  chat_id: i64,
+  task_path: PathBuf,
+  run_id: Option<i64>,
+  unit: Option<String>,
+  #[arg(long)]
+  via: Option<String>,
+  /// The file a sync launch waits on for the run's ending.
+  #[arg(long)]
+  ending: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -150,6 +197,55 @@ async fn carried(cli: Cli) -> Result<Vec<String>, String> {
       };
 
       browse_runner(&settings(cli.data_root)?, &started).await
+    }
+    Verb::RemoteBrowser {
+      chat,
+      by,
+      via,
+      mode,
+      node,
+      steps,
+    } => {
+      let refuse = |why: &str| format!("remote-browser: {why}\n{}", remote_browser::USAGE);
+      let mode = mode_of(mode.as_deref()).map_err(|why| refuse(&why))?;
+      let (Some(chat_id), Some(node), Some(steps)) = (chat, node, steps) else {
+        return Err(refuse("--chat, --node and --steps are all needed"));
+      };
+      let steps = std::fs::read_to_string(&steps)
+        .map_err(|_| refuse(&format!("the steps file {} cannot be read", steps.display())))?;
+      let asked = remote_browser::Asked {
+        chat_id,
+        node,
+        steps,
+        started_by: by,
+        asked_by: variable(AGENT_VARIABLE),
+        via,
+        mode,
+      };
+      // The secrets the steps name come in on standard input, read only where the steps name one.
+      let secrets = || {
+        let mut text = String::new();
+        let _ = std::io::stdin().read_to_string(&mut text);
+        text
+      };
+
+      launch_remote_browser(&settings(cli.data_root)?, &asked, secrets).await
+    }
+    Verb::Runner {
+      run: Runner::RemoteBrowser(run),
+    }
+    | Verb::RemoteBrowserRunner(run) => {
+      let started = remote_browser::Started {
+        chat_id: run.chat_id,
+        task_path: run.task_path,
+        run_id: run.run_id,
+        unit: run.unit.unwrap_or_default(),
+        via: run.via,
+        ending: run.ending,
+        asked_by: variable(AGENT_VARIABLE),
+      };
+
+      remote_browser_runner(&settings(cli.data_root)?, &started).await
     }
   }
 }

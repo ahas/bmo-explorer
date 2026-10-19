@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use axum::body::Bytes;
 use axum::http::{Method, StatusCode, Uri};
 use axum::response::{IntoResponse, Response};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 /// One call the stand-in was asked: its method, its path with its query, and its body.
 #[derive(Clone, Debug)]
@@ -74,14 +74,6 @@ pub async fn serve(answers: Answers) -> StandIn {
   StandIn { address, asked }
 }
 
-/// The browse profile as the research settings seed it.
-pub fn browse_profile() -> Value {
-  json!({
-    "key": "browse", "capMs": 1_800_000, "synthesisReserveMs": 120_000, "childRole": "scout", "maxChildren": 0,
-    "waitLimitMs": 0, "strategy": "headless", "hostIntervalMs": 1_000, "engineIntervalMs": 2_000, "setAt": 1,
-  })
-}
-
 /// A data root whose settings point every unit at the stand-in.
 pub fn data_root(address: &str) -> tempfile::TempDir {
   let root = tempfile::tempdir().unwrap();
@@ -91,7 +83,7 @@ pub fn data_root(address: &str) -> tempfile::TempDir {
   std::fs::write(
     folder.join("settings.toml"),
     format!(
-      "[units]\nagency = \"{address}\"\nreceiver = \"{address}\"\nartifact = \"{address}\"\ngate = \"{address}\"\n"
+      "[units]\nagency = \"{address}\"\nreceiver = \"{address}\"\nartifact = \"{address}\"\ngate = \"{address}\"\nnode = \"{address}\"\n"
     ),
   )
   .unwrap();

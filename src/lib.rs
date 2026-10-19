@@ -4,6 +4,7 @@
 pub mod browse;
 pub mod clients;
 pub mod forms;
+pub mod remote_browser;
 pub mod settings;
 pub mod site;
 pub mod store;

@@ -4,11 +4,13 @@
 //! - `agency` — the run ledger, runs apart, the co-worker pool, run counts, notes and registrations.
 //! - `artifact` — the research settings a browse launches on.
 //! - `gate` — the knowledge a piece of work is handed.
+//! - `node` — the node list and a remote node's connection, which a remote browser drives it through.
 //! - `receiver` — the queue a run's ending is handed back to its room's session through.
 
 pub mod agency;
 pub mod artifact;
 pub mod gate;
+pub mod node;
 pub mod receiver;
 
 use std::time::Duration;

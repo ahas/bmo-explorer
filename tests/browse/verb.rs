@@ -9,7 +9,15 @@ use std::sync::Arc;
 use axum::http::StatusCode;
 use serde_json::{Value, json};
 
-use super::stand_in::{Answers, Asked, browse_profile, data_root, serve};
+use super::stand_in::{Answers, Asked, data_root, serve};
+
+/// The browse profile as the research settings seed it.
+fn browse_profile() -> Value {
+  json!({
+    "key": "browse", "capMs": 1_800_000, "synthesisReserveMs": 120_000, "childRole": "scout", "maxChildren": 0,
+    "waitLimitMs": 0, "strategy": "headless", "hostIntervalMs": 1_000, "engineIntervalMs": 2_000, "setAt": 1,
+  })
+}
 
 const ROOM: i64 = -100;
 const BY: &str = "chat:-100";

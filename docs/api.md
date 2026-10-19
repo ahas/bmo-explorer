@@ -123,12 +123,13 @@ standard error, and ends 0 where it did what was asked, 1 where it refused, and 
 | `browse` | | `browse --chat <chatId> [--by <who>] [--via <road>] [--mode <sync\|async>]`, the task on standard input, with the login its holder offered after it on a line of its own that names it as such |
 | `runner browse` | `browse-runner` | `runner browse <chatId> <taskFile> [runId] [unit] [profile] [--kept-on <registration>] [--via <road>] [--ending <file>]` |
 | `remote-browser` | | `remote-browser --chat <chatId> --by chat:<chatId> [--via <road>] [--mode <sync\|async>] --node <name> --steps <file>`, the secrets the steps name on standard input as `NAME=value` lines |
-| `runner remote-browser` | `remote-browser-runner` | `runner remote-browser <chatId> <taskFile> [runId] [unit]` |
+| `runner remote-browser` | `remote-browser-runner` | `runner remote-browser <chatId> <taskFile> [runId] [unit] [--via <road>] [--ending <file>]` |
 | `tool unread-pages` | `unread-pages` | `tool unread-pages`, the pages no road read, a site at a time (docs/site-contract.md, "A page the searcher could not read") |
 
 - **`browse` and `remote-browser` launch:** each refuses before anything is opened where its words or its input
   do not hold, opens the run's row in bmo-agency's run ledger, writes the task for the runner to a file only
-  its owner reads, and has bmo-agency launch the runner, under the title `browse for chat <chatId>`. With
+  its owner reads, and has bmo-agency launch the runner, under the title `browse for chat <chatId>` or
+  `remote browser for chat <chatId> on <node label>`. With
   `--mode async`, or none, it answers once the runner is launched; with `--mode sync` it hands the runner a
   file only its owner reads, `--ending`, waits until bmo-agency's ledger holds the run closed, and prints the
   ending the runner wrote there, however long the run takes. A launch whose runner did not come up takes its
@@ -187,7 +188,8 @@ standard error, and ends 0 where it did what was asked, 1 where it refused, and 
 
 - **A run's ending** is queued as a quiet instruction for the agent that asked, in the room it asked in:
   `POST /instructions` with an instruction as bmo-receiver's `docs/boundary-api.md` states it ("For bmo-job"):
-  `agent`, the agent whose turn asked; `chat`; `said` holding the ending as an order; `sort` `browse`; `via`,
+  `agent`, the agent whose turn asked; `chat`; `said` holding the ending as an order; `sort`, `browse` or
+  `remote_browser`; `via`,
   the road the question came in on; and `run` naming the run. It answers `201` with the instruction's `id`.
 
 ### bmo-gate
@@ -210,8 +212,10 @@ standard error, and ends 0 where it did what was asked, 1 where it refused, and 
 
 ### bmo-node
 
-- **A remote browser's node.** `GET /nodes/{name}/target` answers the node's connection: for a remote node,
-  `hubUrl`, `tokenFile` and `agent`. A node not in the list, or one that is not a remote node, refuses the launch.
+- **A remote browser's node.** `GET /nodes` answers the list, of which the launch reads the node's `label` and
+  `kind`; `GET /nodes/{name}/target` answers its connection: for a remote node, `hubUrl`, `tokenFile` and `agent`.
+  A node not in the list, or one that is not a remote node, refuses the launch, and a runner whose node has left
+  the list fails, telling the agent so.
 - **The remote hub,** an outside program the node service lists, is asked over its HTTP control address with the
   token its token file holds: `POST /exec?agent=<agent>` runs one command on the node's machine, and an exec
   still running is cancelled on the same address (docs/remote-browser.md, "On the node").
