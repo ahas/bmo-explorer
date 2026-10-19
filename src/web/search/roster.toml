@@ -1,0 +1,110 @@
+# Every search engine the web layer asks, as one roster (docs/web-access.md, 「Rosters」), in the order a
+# category's engines are asked. Each engine's module reads its own entry by its name; what it does is the
+# module's. An entry names the engine as its health, recipe and cookies are kept, its category, whether it is
+# asked first for a Korean query and last for any other, and whether it indexes the English-language web.
+
+[[engine]]
+name = "naver"
+category = "general"
+korean_native = true
+english_web = false
+
+[[engine]]
+name = "daum"
+category = "general"
+korean_native = true
+english_web = false
+
+[[engine]]
+name = "duckduckgo"
+category = "general"
+korean_native = false
+english_web = true
+
+[[engine]]
+name = "zapmeta"
+category = "general"
+korean_native = false
+english_web = true
+
+[[engine]]
+name = "yandex"
+category = "general"
+korean_native = false
+english_web = true
+
+[[engine]]
+name = "naver news"
+category = "news"
+korean_native = true
+english_web = false
+
+[[engine]]
+name = "daum news"
+category = "news"
+korean_native = true
+english_web = false
+
+[[engine]]
+name = "bing news"
+category = "news"
+korean_native = false
+english_web = true
+
+[[engine]]
+name = "openverse"
+category = "images"
+korean_native = false
+english_web = true
+
+[[engine]]
+name = "wikicommons.images"
+category = "images"
+korean_native = false
+english_web = true
+
+[[engine]]
+name = "unsplash"
+category = "images"
+korean_native = false
+english_web = true
+
+[[engine]]
+name = "github"
+category = "it"
+korean_native = false
+english_web = true
+
+[[engine]]
+name = "stackoverflow"
+category = "it"
+korean_native = false
+english_web = true
+
+# How long an engine rests after a refusal its one retry did not clear, in milliseconds: a failure that
+# is no refusal, a refusal of the network or one still standing in the real browser, and any other.
+[rests]
+failure_ms = 5000
+network_ms = 3600000
+refusal_ms = 180000
+
+# The rest lengths as a reader is shown them, one line per case, each naming the rest above it takes.
+[[cooldown]]
+reason = "network"
+rest = "network"
+
+[[cooldown]]
+reason = "still refused in the real browser"
+rest = "network"
+
+[[cooldown]]
+reason = "rate"
+rest = "refusal"
+
+[[cooldown]]
+reason = "any other refusal"
+rest = "refusal"
+
+[[cooldown]]
+reason = "other failure"
+rest = "failure"

@@ -182,8 +182,7 @@
 
 - **Binary and profile:** the web layer runs `/usr/bin/google-chrome` stable non-headless, with a fresh
   temporary `--user-data-dir` and a loopback DevTools endpoint. The arguments it adds for a detached
-  session and the session variables it clears stand in the `[browser]` settings (docs/api.md, 「Settings
-  and data」).
+  session and the session variables it clears are built in beside the code that starts it.
 - **Its own screen:** a dedicated virtual X server (Xvfb) the web layer starts for this Chrome.
   - Xvfb picks a free display number itself and reports it, so it never collides with another X server.
   - It accepts connections only with a random cookie kept inside the temporary profile, and does not
@@ -312,7 +311,7 @@
   category. Adding an engine is writing its module and putting it in the list; nothing else
   anywhere is told about it.
 - **The engines' states and cooldowns are read by other units** only through `explorer/search_engines`
-  (docs/api.md, 「The explorer entries」); the `[search]` settings hold the cooldowns.
+  (docs/api.md, 「The explorer entries」); the roster and the rests are built in beside the engines' code.
 
 ### Rosters
 

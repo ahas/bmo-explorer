@@ -80,7 +80,7 @@ The pages no road read (docs/site-contract.md, 「A page the searcher could not 
 | `run` | text, may be null | The kind of run that met it: `search` or `browse` |
 | `recorded_at` | integer | When it was written |
 
-- **The list reads the newest first,** a site at a time, so the table is read by `site` and `recorded_at`.
+- **The list reads the newest first,** a site at a time, so the table is indexed by `site` and `recorded_at`.
 
 ## Times
 

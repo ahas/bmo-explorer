@@ -23,10 +23,12 @@ another repository reaches it through nothing else, and it reaches another repos
     `receiver` and `receiver_token`, `artifact` and `artifact_token`, `node` and `node_token`. A call whose
     address is unset is refused with an English sentence naming the setting; a token unset goes with none, and
     the service refuses it as it refuses any call without its token.
-  - `[browser]`: what the real Chrome is started with (docs/web-access.md, "How Chrome is started").
-  - `[search]`: the search engines' cooldowns and the rosters' order (docs/web-access.md, "Search engines").
   - `[remote_browser]`: the debugging port and the profile a remote browser lands on where its steps name
     neither (docs/remote-browser.md, "The steps").
+- **What the web layer is built with stands beside the code that reads it,** not in the settings: the engine
+  roster with each engine's category and the rests after a refusal (docs/web-access.md, "Rosters"), and the
+  arguments every Chrome it starts carries with the session variables none of them is handed (docs/web-access.md,
+  "How Chrome is started").
 - **Every answer this repository gives is English,** a sentence for a person or a status code for a program. A
   room's words are its agent's: a run hands the agent facts, and the agent says them in the room's language.
 

@@ -1,0 +1,33 @@
+{
+ "items": [
+  {
+   "tags": [
+    "ios",
+    "sqlite",
+    "core-data",
+    "wal"
+   ],
+   "is_answered": true,
+   "score": 34,
+   "answer_count": 6,
+   "link": "https://stackoverflow.com/questions/20969996/is-it-safe-to-delete-sqlites-wal-file",
+   "title": "Is it safe to delete sqlite&#39;s WAL file?",
+   "question_id": 20969996
+  },
+  {
+   "tags": [
+    "ios",
+    "sqlite",
+    "core-data",
+    "icloud"
+   ],
+   "is_answered": true,
+   "score": 7,
+   "answer_count": 2,
+   "link": "https://stackoverflow.com/questions/30665804/restrict-sqlite-wal-and-sqlite-shm-from-icloud-backup",
+   "title": "restrict sqlite-wal and sqlite-shm from icloud backup",
+   "question_id": 30665804
+  }
+ ],
+ "has_more": true
+}
