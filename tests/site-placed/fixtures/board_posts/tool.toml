@@ -1,0 +1,37 @@
+# A site tool standing in for one that reads a forum's posts (docs/site-contract.md, 「A page a tool claims」): a
+# post's address on board.example.com, `/b/<board>/<id>`, is claimed as the page to read, and the post is read by
+# the `page` road of the record's web helper. It speaks the tool host's call protocol and the helper's socket on
+# the wire, as a site tool of another repository does.
+
+[tool]
+name = "board_posts"
+protocol = 1
+language = "typescript"
+run = ["bun", "board_posts.ts"]
+timeout = 60
+shared = ["web"]
+
+[[entry]]
+namespace = "web"
+name = "board_posts"
+title = "Board posts"
+description = "Reads a post of board.example.com, by its address, as the site serves it. A long post comes in slices; pass the offset the previous slice named."
+input = "board_posts.json"
+hints = { read_only = true, open_world = true }
+capabilities = ["web.sites"]
+
+[entry.listing]
+line = "- board_posts — a board.example.com post's text · Board posts (board.example.com) · since 2026-10-19 · answers board.example.com/b/<board>/<id>"
+order = 20261019
+
+[entry.facts.lists.sites]
+what = "a board.example.com post's text"
+site = "Board posts (board.example.com)"
+since = "2026-10-19"
+arguments = ["max_chars", "offset", "page"]
+answers = "board.example.com/b/<board>/<id>"
+description = "Reads a post of board.example.com, by its address, as the site serves it. A long post comes in slices; pass the offset the previous slice named."
+reads = ["board.example.com"]
+
+[entry.claims]
+hosts = ["board.example.com"]

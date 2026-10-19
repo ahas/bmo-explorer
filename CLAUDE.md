@@ -38,6 +38,8 @@ and everything it calls.
 - **Documents state what is true now:** no change history, no quoted source and no file-and-line pins.
 - **A general format is read by a maintained library,** never by a parser written here; a reading no library
   gives says why beside its code.
+- **`graph/` is the code dependency graph**, written only by `bmo graph` run with `BMO_SOURCE_DIR` naming this
+  checkout; a change that moves a feature's files updates its node in the same commit.
 
 ## Checks
 
@@ -47,7 +49,9 @@ A change moves through three stages in order:
 2. Review: read the whole diff against what the change is for and the document governing it, then
    `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --all --check` (108 columns, 2-space
    indentation, as `rustfmt.toml` sets).
-3. Verification: the test targets the change touched, then the whole suite once: `cargo test --workspace`.
+3. Verification: the test targets the change touched, then the whole suite once: `cargo test --workspace`, and
+   the placed-site test under `tests/site-placed/`, which runs where `BMO_LIVE_TOOL_HOST` names an installed
+   `mcp-host`.
 
 The version is the workspace's, in semver, kept in `VERSION`. `testbed.toml` is the testbed's declaration: how
 it tests, checks, builds and deploys the repository.

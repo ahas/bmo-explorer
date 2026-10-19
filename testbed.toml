@@ -3,7 +3,11 @@ testbed = 0
 name = "bmo-explorer"
 
 [test]
-languages = ["cargo"]
+# The Cargo workspace's crates, and the placed site tools held against an installed tool host, which runs where
+# BMO_LIVE_TOOL_HOST names its mcp-host.
+languages = ["cargo", "bun"]
+files = ["tests/site-placed/**/*.test.ts"]
+setup = ["cd tests/site-placed && bun install --frozen-lockfile"]
 
 [check]
 # The sweeps that read the tree before anything runs: Korean in the code, the README's folder table and the

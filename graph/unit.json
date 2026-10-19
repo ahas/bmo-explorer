@@ -1,0 +1,58 @@
+[
+  {
+    "id": "unit/clients",
+    "title": "Sibling clients and settings",
+    "what": "The settings in explorer/settings.toml and the clients of bmo-agency, bmo-receiver, bmo-artifact, bmo-gate, bmo-node and the tool host's control socket, each by its documented routes. Lives in src/clients/ and src/settings.rs.",
+    "files": [
+      "src/settings.rs",
+      "src/clients/mod.rs",
+      "src/clients/agency.rs",
+      "src/clients/receiver.rs",
+      "src/clients/artifact.rs",
+      "src/clients/gate.rs",
+      "src/clients/node.rs",
+      "src/clients/tool_host.rs",
+      "docs/api.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "unit/command",
+    "title": "Unit command",
+    "what": "The bmo-explorer program: its nouns for the browse and remote-browser launches and runners and the unread-pages list, and the version. Lives in src/main.rs and src/lib.rs.",
+    "files": [
+      "src/main.rs",
+      "src/lib.rs",
+      "docs/api.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "runs/browse",
+      "runs/remote-browser",
+      "unit/unread-pages"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "unit/unread-pages",
+    "title": "Unread pages list",
+    "what": "bmo-explorer tool unread-pages: the pages no road read, a site at a time out of the store, each beside the site tool the tool host names. Lives in src/unread.rs.",
+    "files": [
+      "src/unread.rs",
+      "tests/unread.rs",
+      "docs/site-contract.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "store/explorer-db",
+      "site/unread-record",
+      "unit/clients"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  }
+]

@@ -1,0 +1,180 @@
+[
+  {
+    "id": "web/address-checks",
+    "title": "Outward address checks",
+    "what": "The check every outward request passes: a private, loopback or non-routable address refused before it is asked, each redirect hop checked as it is connected. Lives in src/web/address.rs.",
+    "files": [
+      "src/web/address.rs",
+      "tests/web/address.rs",
+      "docs/web-access.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "web/forms"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "web/chrome",
+    "title": "Real Chrome reading",
+    "what": "The standard Chrome a fetch falls back to and a site tool renders in: its profile, places, display, proxy and DevTools connection, and a page imported whole as the browser draws it. Lives in src/web/chrome/ and src/web/import.rs.",
+    "files": [
+      "src/web/chrome/mod.rs",
+      "src/web/chrome/cdp.rs",
+      "src/web/chrome/detached.rs",
+      "src/web/chrome/detached.toml",
+      "src/web/chrome/display.rs",
+      "src/web/chrome/places.rs",
+      "src/web/chrome/profile.rs",
+      "src/web/chrome/proxy.rs",
+      "src/web/import.rs",
+      "src/web/page_import.js",
+      "tests/web/chrome.rs",
+      "tests/web/chrome_display.rs",
+      "tests/web/chrome_places.rs",
+      "tests/web/chrome_profile.rs",
+      "tests/web/chrome_proxy.rs",
+      "tests/web/import.rs",
+      "docs/web-access.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "web/address-checks",
+      "web/forms"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "web/forms",
+    "title": "Web reading forms",
+    "what": "The forms a web read answers in, below the web layer and the site contract: failure kinds, errors and results, search hits and engine health, the fetch ceiling, the slice of a text and the page text normalised. Lives in src/forms/.",
+    "files": [
+      "src/forms/mod.rs",
+      "src/forms/classify.rs",
+      "src/forms/clock.rs",
+      "src/forms/engine.rs",
+      "src/forms/error.rs",
+      "src/forms/fetch.rs",
+      "src/forms/search.rs",
+      "src/forms/slice.rs",
+      "src/forms/text.rs",
+      "tests/forms.rs",
+      "tests/forms/classify.rs",
+      "tests/forms/error.rs",
+      "tests/forms/slice.rs",
+      "docs/web-access.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "web/pacing",
+    "title": "Per-host pacing",
+    "what": "The pause held between two requests to one host and between two engine queries, against a deadline, so one investigation never hammers a site. Lives in src/web/pacing.rs and clock.rs.",
+    "files": [
+      "src/web/pacing.rs",
+      "src/web/clock.rs",
+      "tests/web/pacing.rs",
+      "docs/web-access.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "web/forms"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "web/pdf",
+    "title": "PDF reading",
+    "what": "A PDF read as its text page by page, or in its layout so a table keeps its rows apart. Lives in src/web/pdf.rs.",
+    "files": [
+      "src/web/pdf.rs",
+      "tests/web/pdf.rs",
+      "docs/web-access.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "web/forms"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "web/pictures",
+    "title": "Picture reading",
+    "what": "An image file read into a picture a model can be shown, rasters and AVIF decoded and scaled. Lives in src/web/picture.rs and src/web/picture/.",
+    "files": [
+      "src/web/picture.rs",
+      "src/web/picture/raster.rs",
+      "src/web/picture/avif.rs",
+      "tests/web/picture.rs",
+      "tests/web/picture_raster.rs",
+      "docs/web-access.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "web/forms"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "web/search-engines",
+    "title": "Search engines",
+    "what": "The web search over the engine roster: each engine asked and its results parsed, engines that stop answering set aside, and the hits merged under the search bounds. Lives in src/web/search/.",
+    "files": [
+      "src/web/search/mod.rs",
+      "src/web/search/engine.rs",
+      "src/web/search/engines.rs",
+      "src/web/search/roster.rs",
+      "src/web/search/roster.toml",
+      "tests/web/search.rs",
+      "tests/web/roster.rs",
+      "docs/web-access.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "web/pacing",
+      "web/forms"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "web/session",
+    "title": "Direct web session",
+    "what": "One investigation's direct reading: a browser-shaped client with its cookie jar and identity, each page classified, and Chrome opened after a blocked direct read. Lives in src/web/session.rs, client.rs and their neighbours.",
+    "files": [
+      "src/web/mod.rs",
+      "src/web/session.rs",
+      "src/web/client.rs",
+      "src/web/identity.rs",
+      "src/web/jar.rs",
+      "src/web/classify.rs",
+      "src/web/error.rs",
+      "tests/web.rs",
+      "tests/web/session.rs",
+      "tests/web/client.rs",
+      "tests/web/identity.rs",
+      "tests/web/jar.rs",
+      "tests/web/testing.rs",
+      "docs/web-access.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "web/address-checks",
+      "web/pacing",
+      "web/chrome",
+      "web/pdf",
+      "web/pictures",
+      "web/forms"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  }
+]

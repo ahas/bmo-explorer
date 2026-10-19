@@ -1,0 +1,86 @@
+[
+  {
+    "id": "site/contract",
+    "title": "Site contract",
+    "what": "The site-tool trait, the roads a tool is given, and the wrapper serving a site tool as a placed web entry with its listing, catalogue item and claimed hosts. Lives in src/site/; the placed contract test is under tests/site-placed/.",
+    "files": [
+      "src/site/mod.rs",
+      "src/site/contract.rs",
+      "src/site/placed.rs",
+      "tests/site.rs",
+      "tests/site-placed/site-placed.test.ts",
+      "docs/site-contract.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "site/helper-client",
+      "site/readers",
+      "site/unread-record",
+      "tool/protocol"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "site/helper-client",
+    "title": "Web helper client",
+    "what": "What a tool asks the record's web helper on its socket, one JSON line each way: the core tools' requests, a site tool's roads and the research guard round its call. Lives in src/site/helper.rs.",
+    "files": [
+      "src/site/helper.rs",
+      "docs/site-contract.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "tool/protocol",
+      "web/forms"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "site/readers",
+    "title": "Shared site readings",
+    "what": "The readings several site tools share: markup, scripts, numbers, journals, markets, ordered JSON, placed text and the forum engines. Lives in src/site/readers/.",
+    "files": [
+      "src/site/readers/mod.rs",
+      "src/site/readers/discourse.rs",
+      "src/site/readers/journal.rs",
+      "src/site/readers/market.rs",
+      "src/site/readers/markup.rs",
+      "src/site/readers/numbers.rs",
+      "src/site/readers/ordered.rs",
+      "src/site/readers/placed.rs",
+      "src/site/readers/plain.rs",
+      "src/site/readers/script.rs",
+      "src/site/readers/tapatalk.rs",
+      "tests/site/readers_market.rs",
+      "tests/site/readers_markup.rs",
+      "tests/site/readers_numbers.rs",
+      "tests/site/readers_ordered.rs",
+      "tests/site/readers_plain.rs",
+      "tests/site/readers_script.rs",
+      "docs/site-contract.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  },
+  {
+    "id": "site/unread-record",
+    "title": "Unread page record",
+    "what": "A page both the direct read and the real Chrome failed, written to the store with its site and shape by a research run's web helper. Lives in src/site/unread.rs.",
+    "files": [
+      "src/site/unread.rs",
+      "tests/site/unread.rs",
+      "docs/site-contract.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [
+      "store/explorer-db",
+      "web/forms"
+    ],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  }
+]

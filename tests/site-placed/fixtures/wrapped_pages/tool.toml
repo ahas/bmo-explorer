@@ -1,0 +1,37 @@
+# A site tool standing in for one whose site wraps another site's page (docs/site-contract.md, 「What a tool is
+# given」, `document`): an address on wrap.example.com carries the wrapped page's address after its host, and the
+# page is read from its own site through the record's web helper. It speaks the tool host's call protocol and the
+# helper's socket on the wire, as a site tool of another repository does.
+
+[tool]
+name = "wrapped_pages"
+protocol = 1
+language = "typescript"
+run = ["bun", "wrapped_pages.ts"]
+timeout = 60
+shared = ["web"]
+
+[[entry]]
+namespace = "web"
+name = "wrapped_pages"
+title = "Page behind a wrap.example.com address"
+description = "Reads the page a wrap.example.com address wraps, from the page's own site, the way web_fetch reads a page. A long page comes in slices; pass the offset the previous slice named."
+input = "wrapped_pages.json"
+hints = { read_only = true, open_world = true }
+capabilities = ["web.sites"]
+
+[entry.listing]
+line = "- wrapped_pages — the page a wrap.example.com address wraps, read from its own site · Wrapped pages (wrap.example.com), read through the page it wraps · since 2026-10-19 · answers wrap.example.com/<address>, with or without the address's scheme"
+order = 20261019
+
+[entry.facts.lists.sites]
+what = "the page a wrap.example.com address wraps, read from its own site"
+site = "Wrapped pages (wrap.example.com), read through the page it wraps"
+since = "2026-10-19"
+arguments = ["max_chars", "offset", "url"]
+answers = "wrap.example.com/<address>, with or without the address's scheme"
+description = "Reads the page a wrap.example.com address wraps, from the page's own site, the way web_fetch reads a page. A long page comes in slices; pass the offset the previous slice named."
+reads = ["wrap.example.com"]
+
+[entry.claims]
+hosts = ["wrap.example.com"]

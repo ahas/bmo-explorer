@@ -1,0 +1,16 @@
+[
+  {
+    "id": "store/explorer-db",
+    "title": "Explorer store",
+    "what": "This repository's own SQLite store in its folder of the data root, its tables made as it is opened. Lives in src/store.rs.",
+    "files": [
+      "src/store.rs",
+      "tests/store.rs",
+      "docs/store.md"
+    ],
+    "symbols": [],
+    "aliases": [],
+    "needs": [],
+    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+  }
+]

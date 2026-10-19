@@ -1,0 +1,4 @@
+[test]
+# The contract test holds an installed tool host to this repository's placed tools; it makes its own scratch
+# folders.
+root = "."
