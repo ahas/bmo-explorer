@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "CooldownOutput": {
+      "properties": {
+        "ms": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason",
+        "ms"
+      ],
+      "type": "object"
+    },
+    "EngineOutput": {
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "elapsed_ms": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "korean_native": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "observed_at": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result_count": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "state": {
+          "description": "`healthy`, `degraded`, `suspended`, or `unknown` where it has not been read.",
+          "type": "string"
+        },
+        "suspended_until": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "category",
+        "korean_native",
+        "state"
+      ],
+      "type": "object"
+    }
+  },
+  "description": "The search engines a research run may query, with their states, and the rest each refusal costs.",
+  "properties": {
+    "cooldowns": {
+      "items": {
+        "$ref": "#/$defs/CooldownOutput"
+      },
+      "type": "array"
+    },
+    "engines": {
+      "items": {
+        "$ref": "#/$defs/EngineOutput"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "engines",
+    "cooldowns"
+  ],
+  "type": "object"
+}

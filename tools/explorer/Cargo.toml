@@ -1,0 +1,15 @@
+[package]
+name = "explorer-tool"
+description = "The explorer entries' executable: what a service's own run reads of the web, through the web layer's checks."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "explorer-tool"
+path = "main.rs"
+test = false
+
+[dependencies]
+bmo-explorer = { path = "../.." }
+tokio.workspace = true

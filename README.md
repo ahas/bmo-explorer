@@ -13,7 +13,7 @@ starts its tools, bmo-agency starts its runs, and `bmo` hands its commands to `b
 | `docs/` | the canonical documents: the boundary every other unit matches (`api.md`), the web reading (`web-access.md`), the site contract (`site-contract.md`), the browse runs (`browse-runs.md`), the remote browser (`remote-browser.md`) and the store (`store.md`) |
 | `src/` | the repository's one crate, `bmo-explorer`, split into its modules: the forms a web read takes, the web layer, the site contract, the tool host's call protocol, the web helper's reading and the store |
 | `tests/` | every test, the checks that span the repository among them |
-| `tools/` | the executables the tool host places, each with its manifest: the shared web helper under `tools/_shared/web` |
+| `tools/` | the executables the tool host places, each with its manifest and schemas: `web_search`, `web_fetch`, `research_branch`, `explorer`, `browse`, `remote_browser`, and the shared web helper under `tools/_shared/web` |
 
 ## Build and test
 

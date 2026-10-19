@@ -2,7 +2,15 @@
 # and remote-browser runs and the unit command, as modules of one crate under `src/`. Each tool the tool host
 # places is a member of its own under `tools/`, since each is an executable the host starts by its manifest.
 [workspace]
-members = ["tools/_shared/web"]
+members = [
+  "tools/_shared/web",
+  "tools/browse",
+  "tools/explorer",
+  "tools/remote_browser",
+  "tools/research_branch",
+  "tools/web_fetch",
+  "tools/web_search",
+]
 resolver = "3"
 
 [workspace.package]
@@ -106,6 +114,8 @@ simplecss.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
+# The steps a remote browser's launch hands its command, in a file only its owner reads.
+tempfile.workspace = true
 # The settings built in beside the modules that read them.
 toml.workspace = true
 url.workspace = true
@@ -114,4 +124,3 @@ url.workspace = true
 axum.workspace = true
 # The README's folder table, read as markdown.
 pulldown-cmark.workspace = true
-tempfile.workspace = true

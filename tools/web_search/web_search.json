@@ -1,0 +1,53 @@
+{
+  "$defs": {
+    "Category": {
+      "description": "Which engines a search asks.",
+      "enum": [
+        "general",
+        "news",
+        "images",
+        "it"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "category": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Category"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Which engines to ask: general web, news, images or IT; omit for \"general\"."
+    },
+    "count": {
+      "description": "How many hits to return (default 10).",
+      "format": "uint32",
+      "maximum": 30,
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "language": {
+      "description": "Result language such as \"ko\" or \"en\"; omit for any.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "query": {
+      "description": "The search query.",
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "query"
+  ],
+  "type": "object"
+}

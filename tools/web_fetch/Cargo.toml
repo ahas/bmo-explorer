@@ -1,0 +1,15 @@
+[package]
+name = "web-fetch-tool"
+description = "The page reading's executable: a claimed page answered by its site tool, any other by the record's web helper."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "web-fetch-tool"
+path = "main.rs"
+test = false
+
+[dependencies]
+bmo-explorer = { path = "../.." }
+tokio.workspace = true

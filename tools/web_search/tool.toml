@@ -1,0 +1,21 @@
+# The web search: the search engines asked directly through the record's web helper (docs/web-access.md).
+# The repository's tools test holds the entry here to the tool answering it.
+
+[tool]
+name = "web_search"
+protocol = 1
+language = "rust"
+build = 'cargo build --release -p web-search-tool && cp "$BMO_CARGO_TARGET/release/web-search-tool" "$BMO_TOOL_OUT/"'
+check = 'cargo test --test tools'
+run = ["web-search-tool"]
+timeout = 300
+shared = ["web"]
+
+[[entry]]
+namespace = "web"
+name = "web_search"
+title = "Web search"
+description = "Searches the web by asking the search engines directly and returns their results as they are: title, URL and snippet per hit, nothing summarized. Run more than one query when the first does not settle the question, then open the pages that matter with web_fetch."
+input = "web_search.json"
+hints = { read_only = true, open_world = true }
+capabilities = ["web.read"]

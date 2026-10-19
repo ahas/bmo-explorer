@@ -1,0 +1,22 @@
+# The remote browser launch (docs/remote-browser.md, 「The launch」): a list of steps on a remote node handed to the
+# unit command, whose ending a sync call waits for however long it takes. The repository's tools test holds the
+# entry here to the tool answering it.
+
+[tool]
+name = "remote_browser"
+protocol = 1
+language = "rust"
+build = 'cargo build --release -p remote-browser-tool && cp "$BMO_CARGO_TARGET/release/remote-browser-tool" "$BMO_TOOL_OUT/"'
+check = 'cargo test --test tools'
+run = ["remote-browser-tool"]
+timeout = 180
+
+[[entry]]
+namespace = "bmo"
+name = "remote_browser"
+description = "Drive a browser on a remote node through a list of steps; what it did comes back in this call (sync) or to your next turn (async)."
+input = "remote_browser.json"
+hints = { open_world = true }
+unbounded = true
+capabilities = ["room.tools"]
+grant = "launch"

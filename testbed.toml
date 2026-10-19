@@ -117,7 +117,7 @@ set -eu
 rm -rf tools/explorer/.placed
 mkdir -p tools/explorer/.placed
 cp bin/explorer-tool tools/explorer/tool.toml tools/explorer/*.json tools/explorer/.placed/
-bmo pocket put tools/explorer/.placed --placed --service bmo-explorer --allow web.read
+bmo pocket put tools/explorer/.placed --placed --service bmo-explorer
 '''
 
 [[deploy.step]]

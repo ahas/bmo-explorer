@@ -1,0 +1,22 @@
+# One research branch, opened and held by the record's web helper (docs/browse-runs.md, 「The profile and the
+# branches」); its call waits as long as the branch runs, which the run's research close bounds. The repository's
+# tools test holds the entry here to the tool answering it.
+
+[tool]
+name = "research_branch"
+protocol = 1
+language = "rust"
+build = 'cargo build --release -p research-branch-tool && cp "$BMO_CARGO_TARGET/release/research-branch-tool" "$BMO_TOOL_OUT/"'
+check = 'cargo test --test tools'
+run = ["research-branch-tool"]
+timeout = 3600
+shared = ["web"]
+
+[[entry]]
+namespace = "web"
+name = "research_branch"
+title = "Research branch"
+description = "Opens one research branch: a separate run that researches the angle you give it with the web tools and returns its notes when it has finished, which takes a minute or two. It takes a place in the common co-worker pool first and waits for one. The run's allowance and the pool are held by this tool; a refusal is final for that request. Several branches may be opened in parallel with separate calls, and opening them together is how a turn's angles run side by side rather than one after another. What a branch returns is unchecked working notes."
+input = "research_branch.json"
+hints = { read_only = true, open_world = true }
+capabilities = ["web.branches"]

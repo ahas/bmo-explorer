@@ -47,16 +47,21 @@ repository's own (`testbed.toml`, its deploy steps). The host's call protocol is
 | `tools/research_branch` | `web/research_branch` | `web.branches` | | Opens one research branch for an angle and answers with its notes |
 | `tools/browse` | `bmo/browse` | `room.tools` | `search` | Launches a browse run (docs/browse-runs.md) |
 | `tools/remote_browser` | `bmo/remote_browser` | `room.tools` | `launch` | Launches a remote-browser run (docs/remote-browser.md) |
-| `tools/explorer` | `explorer/import_page`, `explorer/fetch_raster`, `explorer/fetch_page`, `explorer/search_engines` | `web.read` | | A page, a picture, a page's head and the engines' states, for a service's own runs (below) |
+| `tools/explorer` | `explorer/import_page`, `explorer/fetch_raster`, `explorer/fetch_page`, `explorer/search_engines` | none: for the system alone | | A page, a picture, a page's head and the engines' states, for a service's own runs (below) |
 | `tools/_shared/web` | the shared helper `web` | | | One record's web reading, which every tool above but the launching ones asks on its socket |
 
 - **`web_search`, `web_fetch` and `research_branch` name the helper `web`** among their shared helpers, and so
   does every site tool a site-tool repository places; the host starts one helper a record and hands its socket
   to every call naming it.
-- **The launching tools** take the inputs their schemas state and hand the run to the unit command (below):
-  a call in `sync` waits for the run's ending and answers with it, at most two minutes; a call in `async`
-  answers at once that the run is under way, and the ending reaches the agent's next turn as a quiet
-  instruction.
+- **The launching tools** take the inputs their schemas state and hand the run to the unit command (below),
+  `bmo-explorer` as the `PATH` they run under finds it, under the turn's variables (`BMO_TURN_CHAT`,
+  `BMO_TURN_AGENT`, `BMO_TURN_VIA` and the run's own): a call in `sync` waits for the run's ending and answers
+  with it, however long the run takes; a call in `async` answers once the run is launched, and the ending
+  reaches the agent's next turn as a quiet instruction.
+  - The room is the one the call names, or the turn's own; a call naming none outside a room's turn is refused.
+    A run is set off by the turn's room, `chat:<chatId>`, and runs in the mode the call asks, or its tool's own,
+    in the turn's own room, and async in another, whose ending is that room's session's to answer.
+  - `browse` goes async where the call names no mode, and `remote_browser` sync.
   - `browse` takes `task` (required), what to do in one self-contained text; `secrets`, the holder's login, kept
     out of the task; `mode` (`sync` or `async`); `chat` and `message`, the room and the message it answers.
   - `remote_browser` takes `node` (required), the node by its name in the node list; `plan` (required), the
@@ -114,15 +119,16 @@ standard error, and ends 0 where it did what was asked, 1 where it refused, and 
 
 | Noun | Also run as | Words |
 |---|---|---|
-| `browse` | | `browse --chat <chatId> [--by <who>] [--via <road>]`, the task on standard input |
+| `browse` | | `browse --chat <chatId> [--by <who>] [--via <road>] [--mode <sync\|async>]`, the task on standard input, with the login its holder offered after it on a line of its own that names it as such |
 | `runner browse` | `browse-runner` | `runner browse <chatId> <taskFile> [runId] [unit] [profile] [--kept-on <registration>]` |
-| `remote-browser` | | `remote-browser --chat <chatId> --by chat:<chatId> [--via <road>] --node <name> --steps <file>`, the secrets the steps name on standard input as `NAME=value` lines |
+| `remote-browser` | | `remote-browser --chat <chatId> --by chat:<chatId> [--via <road>] [--mode <sync\|async>] --node <name> --steps <file>`, the secrets the steps name on standard input as `NAME=value` lines |
 | `runner remote-browser` | `remote-browser-runner` | `runner remote-browser <chatId> <taskFile> [runId] [unit]` |
 | `tool unread-pages` | `unread-pages` | `tool unread-pages`, the pages no road read, a site at a time (docs/site-contract.md, "A page the searcher could not read") |
 
 - **`browse` and `remote-browser` launch:** each refuses before anything is opened where its words or its input
   do not hold, opens the run's row in bmo-agency's run ledger, writes the task for the runner to a file only
-  its owner reads, and has bmo-agency launch the runner. It answers once the runner is launched.
+  its owner reads, and has bmo-agency launch the runner. With `--mode async`, or none, it answers once the
+  runner is launched; with `--mode sync` it waits for the run's ending and prints it, however long the run takes.
 - **The runners are what bmo-agency launches,** never a person. Each reads its task file and deletes it, carries
   the run, closes the run's row with how it ended, and hands the ending to the agent that asked as a quiet
   instruction. A stop signal (`SIGTERM` or `SIGINT`) stops the run, and the stop is handed back as its ending.

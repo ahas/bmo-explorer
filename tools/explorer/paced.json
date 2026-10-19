@@ -1,0 +1,18 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "description": "The address.",
+      "type": "string"
+    },
+    "pacing": {
+      "description": "Whose requests are paced together: one name for each run's reading.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "address",
+    "pacing"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,25 @@
+{
+  "description": "A page's head as it was fetched.",
+  "properties": {
+    "html": {
+      "description": "The page decoded as its charset says, where it is markup; null otherwise.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "type": {
+      "description": "The content type as the server sent it.",
+      "type": "string"
+    },
+    "url": {
+      "description": "The address after every redirect.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "url",
+    "type"
+  ],
+  "type": "object"
+}

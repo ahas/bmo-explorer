@@ -303,6 +303,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "browse-tool"
+version = "0.1.0"
+dependencies = [
+ "bmo-explorer",
+ "tokio",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -739,6 +747,14 @@ checksum = "5a23add41df1562121a9393cb065eab5146a1242410f23a644851e90cfd669d2"
 dependencies = [
  "parking",
  "pin-project-lite",
+]
+
+[[package]]
+name = "explorer-tool"
+version = "0.1.0"
+dependencies = [
+ "bmo-explorer",
+ "tokio",
 ]
 
 [[package]]
@@ -2320,6 +2336,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
+name = "remote-browser-tool"
+version = "0.1.0"
+dependencies = [
+ "bmo-explorer",
+ "tokio",
+]
+
+[[package]]
 name = "reqwest"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2360,6 +2384,14 @@ dependencies = [
  "wasm-bindgen-futures",
  "wasm-streams",
  "web-sys",
+]
+
+[[package]]
+name = "research-branch-tool"
+version = "0.1.0"
+dependencies = [
+ "bmo-explorer",
+ "tokio",
 ]
 
 [[package]]
@@ -3620,11 +3652,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-fetch-tool"
+version = "0.1.0"
+dependencies = [
+ "bmo-explorer",
+ "tokio",
+]
+
+[[package]]
 name = "web-helper"
 version = "0.1.0"
 dependencies = [
  "bmo-explorer",
  "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "web-search-tool"
+version = "0.1.0"
+dependencies = [
+ "bmo-explorer",
  "tokio",
 ]
 

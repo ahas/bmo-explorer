@@ -1,0 +1,13 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "description": "The page's address.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "address"
+  ],
+  "type": "object"
+}
