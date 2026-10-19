@@ -6,12 +6,14 @@
 //! - `gate` — the knowledge a piece of work is handed.
 //! - `node` — the node list and a remote node's connection, which a remote browser drives it through.
 //! - `receiver` — the queue a run's ending is handed back to its room's session through.
+//! - `tool_host` — the tool host's control socket, for the site tools' catalogue and a page's claim.
 
 pub mod agency;
 pub mod artifact;
 pub mod gate;
 pub mod node;
 pub mod receiver;
+pub mod tool_host;
 
 use std::time::Duration;
 

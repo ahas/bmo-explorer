@@ -8,9 +8,11 @@ use std::process::ExitCode;
 
 use bmo_explorer::browse::launch::{AGENT_VARIABLE, Asked, HOME_VARIABLE, launch};
 use bmo_explorer::browse::runner::{Started, browse_runner};
+use bmo_explorer::clients::tool_host::ToolHost;
 use bmo_explorer::remote_browser::{self, launch_remote_browser, remote_browser_runner};
 use bmo_explorer::settings::Settings;
 use bmo_explorer::tools::launching::Mode;
+use bmo_explorer::unread::unread_pages;
 use clap::{Args, Parser, Subcommand};
 
 /// The nouns this command carries, one a line, as `bmo` asks them.
@@ -21,6 +23,8 @@ pub const NOUNS: &[&str] = &[
   "remote-browser",
   "runner remote-browser",
   "remote-browser-runner",
+  "tool unread-pages",
+  "unread-pages",
 ];
 
 #[derive(Parser)]
@@ -87,6 +91,21 @@ enum Verb {
   /// The run of a remote browser its launcher started.
   #[command(name = "remote-browser-runner", allow_negative_numbers = true)]
   RemoteBrowserRunner(RemoteBrowserRunner),
+  /// The site tools' own commands.
+  Tool {
+    #[command(subcommand)]
+    verb: ToolVerb,
+  },
+  /// The pages no road read, a site at a time.
+  #[command(name = "unread-pages")]
+  UnreadPages,
+}
+
+#[derive(Subcommand)]
+enum ToolVerb {
+  /// The pages no road read, a site at a time.
+  #[command(name = "unread-pages")]
+  UnreadPages,
 }
 
 #[derive(Subcommand)]
@@ -230,6 +249,14 @@ async fn carried(cli: Cli) -> Result<Vec<String>, String> {
       };
 
       launch_remote_browser(&settings(cli.data_root)?, &asked, secrets).await
+    }
+    Verb::Tool {
+      verb: ToolVerb::UnreadPages,
+    }
+    | Verb::UnreadPages => {
+      let settings = settings(cli.data_root)?;
+
+      unread_pages(&settings.data_root, &ToolHost::from_environment()).await
     }
     Verb::Runner {
       run: Runner::RemoteBrowser(run),

@@ -225,8 +225,11 @@ standard error, and ends 0 where it did what was asked, 1 where it refused, and 
 - **The call protocol** the tools speak, version 1 (its `docs/mcp-host.md`, "The call protocol").
 - **A claim.** `web_fetch` asks the call's call-back socket which entry the record holds claims an address, and
   calls that entry through the same socket (docs/site-contract.md, "A page a tool claims").
-- **The site catalogue.** `tool unread-pages` reads the `web` namespace's facts on the host's control socket,
-  `GET /facts/web`, to mark a site with the tool that reads it.
+- **The site catalogue and a page's claim.** `tool unread-pages` asks the host's control socket, HTTP over the
+  Unix socket `BMO_MCP_HOST_SOCKET` names or `bmo/mcp-host.sock` under the user's runtime directory, to mark a
+  site with the tool that reads it: `POST /claims` (`session`, a record of the line `shell` holding `web.sites`,
+  and `address`, the site's last page) for the entry that claims the page, and else `GET /facts/web`, whose
+  `sites` name what each site tool reads. A store holding no unread page asks the host nothing.
 
 ## Missing in siblings
 
