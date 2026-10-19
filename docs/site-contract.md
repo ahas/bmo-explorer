@@ -115,6 +115,10 @@
   - `head` — what a server answers about one address asked for without its body: its status, the
     address it ended at and its headers, whatever the status, for a site that serves files too
     large to read whose size, date and checksum stand in the headers.
+- **Every road passes the reading's checks,** whatever shape its request takes: each hop's address is checked
+  and connected to as it passed, each hop is paced per host, and a redirect is followed one checked hop at a time
+  (docs/web-access.md, 「Address checks」 and 「Pacing」). A `page` and a `head` keep their own request: the
+  browser's name and language and the tool's own headers, with no cookies kept between them.
 - **The research guard stands round every call,** in the record's web reading:
   - a call is refused as research has closed before its tool reads anything;
   - a tool that reads through the engines is held to the same refusals the plain web search is,

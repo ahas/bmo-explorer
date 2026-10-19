@@ -5,6 +5,9 @@
   "src/web/search/mod.rs": 1,
   "tests/forms/classify.rs": 7,
   "tests/repository.rs": 4,
+  "tests/site/readers_markup.rs": 2,
+  "tests/site/readers_plain.rs": 3,
+  "tests/site/unread.rs": 3,
   "tests/web/client.rs": 4,
   "tests/web/search.rs": 28,
   "tests/web/session.rs": 5
