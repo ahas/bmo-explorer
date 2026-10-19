@@ -241,6 +241,10 @@ repository's worker:
   carries the code that runs it; bmo-job's `docs/cli.md` lists `research branch` with the same words among its
   nouns. `bmo` refuses a noun two unit commands declare, so one of the two must give it up. This repository
   calls `bmo research-branch` and reads nothing of which unit answers it.
+- **bmo-markup:** its Rust crate holds no answer ceiling; its TypeScript package alone serves `answer-cap`. A tool
+  answer here is held under the ceiling by this repository's own Rust twin, tested against its own copy of the
+  cases, until the crate serves the ceiling; bmo-markup's `docs/copies.md` does not yet list that copy among the
+  copies other repositories hold.
 - **bmo-cli:** `tool unread-pages` (`unread-pages`) is this repository's noun, read out of its own store; bmo-cli's
   `docs/boundary.md` lists it as not served yet.
 - **bmo-agency:** its `docs/api.md` states no run apart, though bmo-artifact's search runner and this
