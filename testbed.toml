@@ -1,0 +1,143 @@
+# How bmo-testbed tests, checks, builds and deploys this repository, in the testbed's declaration format.
+testbed = 0
+name = "bmo-explorer"
+
+[test]
+languages = ["cargo"]
+
+[check]
+# The sweeps that read the tree before anything runs: Korean in the code, the README's folder table and the
+# dependencies the manifests name. The ledger is the Korean allowed per code file.
+quick = ["korean", "layout", "dependencies"]
+korean_ledger = "korean-ledger.json"
+# The base libraries this repository may build on. Every other unit is reached through the routes and commands
+# docs/api.md states.
+base_libraries = ["bmo-chat", "bmo-chat-client", "bmo-ui", "bmo-markup"]
+
+[[check.step]]
+id = "check"
+command = "cargo check --workspace --all-targets"
+lane = "wide"
+
+[[check.step]]
+id = "clippy"
+command = "cargo clippy --workspace --all-targets -- -D warnings"
+lane = "wide"
+
+[[check.step]]
+id = "fmt"
+command = "cargo fmt --all --check"
+
+# Each tool under tools/ is checked by its own manifest (docs/api.md, "The tools").
+[tools]
+dir = "tools"
+
+# The unit command and each tool's executable go into a release's bin/.
+[build]
+binaries = [
+  "bmo-explorer",
+  "web-search-tool",
+  "web-fetch-tool",
+  "research-branch-tool",
+  "web-helper",
+  "explorer-tool",
+  "browse-tool",
+  "remote-browser-tool",
+]
+
+# The repository runs no service of its own: a deployment places its tools with the tool host and its unit
+# command beside `bmo`. Its data stands in its own folder of the data root (docs/store.md).
+[deploy]
+root = "~/.local/share/bmo-explorer"
+link = "deploy"
+data_root = "~/.local/share/bmo/data"
+units = []
+
+# The unit command, linked into the folder holding `bmo`, the first folder `bmo` looks for unit commands in.
+[[deploy.step]]
+id = "link-unit-command"
+phase = "before-flip"
+command = '''
+set -eu
+bmo_dir="$(dirname "$(command -v bmo)")"
+ln -sfn "$PWD/bin/bmo-explorer" "$bmo_dir/bmo-explorer"
+'''
+
+# Each tool placed as one folder, its release executable beside its manifest and schemas, and registered with
+# the tool host as this repository's own, allowing each capability and grant its entries ask for.
+[[deploy.step]]
+id = "register-web-helper"
+phase = "before-flip"
+command = '''
+set -eu
+rm -rf tools/_shared/web/.placed
+mkdir -p tools/_shared/web/.placed
+cp bin/web-helper tools/_shared/web/tool.toml tools/_shared/web/.placed/
+bmo pocket put tools/_shared/web/.placed --placed --service bmo-explorer
+'''
+
+[[deploy.step]]
+id = "register-web-search"
+phase = "before-flip"
+command = '''
+set -eu
+rm -rf tools/web_search/.placed
+mkdir -p tools/web_search/.placed
+cp bin/web-search-tool tools/web_search/tool.toml tools/web_search/*.json tools/web_search/.placed/
+bmo pocket put tools/web_search/.placed --placed --service bmo-explorer --allow web.read
+'''
+
+[[deploy.step]]
+id = "register-web-fetch"
+phase = "before-flip"
+command = '''
+set -eu
+rm -rf tools/web_fetch/.placed
+mkdir -p tools/web_fetch/.placed
+cp bin/web-fetch-tool tools/web_fetch/tool.toml tools/web_fetch/*.json tools/web_fetch/.placed/
+bmo pocket put tools/web_fetch/.placed --placed --service bmo-explorer --allow web.read
+'''
+
+[[deploy.step]]
+id = "register-research-branch"
+phase = "before-flip"
+command = '''
+set -eu
+rm -rf tools/research_branch/.placed
+mkdir -p tools/research_branch/.placed
+cp bin/research-branch-tool tools/research_branch/tool.toml tools/research_branch/*.json tools/research_branch/.placed/
+bmo pocket put tools/research_branch/.placed --placed --service bmo-explorer --allow web.branches
+'''
+
+[[deploy.step]]
+id = "register-explorer"
+phase = "before-flip"
+command = '''
+set -eu
+rm -rf tools/explorer/.placed
+mkdir -p tools/explorer/.placed
+cp bin/explorer-tool tools/explorer/tool.toml tools/explorer/*.json tools/explorer/.placed/
+bmo pocket put tools/explorer/.placed --placed --service bmo-explorer --allow web.read
+'''
+
+[[deploy.step]]
+id = "register-browse"
+phase = "before-flip"
+command = '''
+set -eu
+rm -rf tools/browse/.placed
+mkdir -p tools/browse/.placed
+cp bin/browse-tool tools/browse/tool.toml tools/browse/*.json tools/browse/.placed/
+bmo pocket put tools/browse/.placed --placed --service bmo-explorer --allow room.tools --allow search
+'''
+
+[[deploy.step]]
+id = "register-remote-browser"
+phase = "before-flip"
+command = '''
+set -eu
+rm -rf tools/remote_browser/.placed
+mkdir -p tools/remote_browser/.placed
+cp bin/remote-browser-tool tools/remote_browser/tool.toml tools/remote_browser/*.json tools/remote_browser/.placed/
+bmo pocket put tools/remote_browser/.placed --placed --service bmo-explorer --allow room.tools --allow launch
+'''

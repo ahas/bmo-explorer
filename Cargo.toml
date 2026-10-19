@@ -1,0 +1,31 @@
+# The workspace and the repository's own package, `bmo-explorer`: the web reading, the site contract, the browse
+# and remote-browser runs and the unit command, as modules of one crate under `src/`. Each tool the tool host
+# places is a member of its own under `tools/`, since each is an executable the host starts by its manifest.
+[workspace]
+members = []
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace.dependencies]
+pulldown-cmark = { version = "0.13.0", default-features = false }
+serde_json = "1.0.140"
+toml = { version = "0.8.23", default-features = false, features = ["parse"] }
+
+[package]
+name = "bmo-explorer"
+description = "The web tools a tool host serves, the browse and remote-browser runs, and their unit command."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+# The README's folder table, read as markdown.
+pulldown-cmark.workspace = true
+# The workspace's packages as `cargo metadata` answers them, and the ledger.
+serde_json.workspace = true
+# The other manifests a project carries, and the testbed declaration.
+toml.workspace = true
