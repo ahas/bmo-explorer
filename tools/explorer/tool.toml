@@ -1,5 +1,5 @@
 # The explorer entries (docs/api.md, 「The explorer entries」): what a caller of the tool host reads of the web — a
-# raster picture, a page's head and the search engines' states — through the web layer's checks. Each is for the system alone, reached by the tool host's POST /calls. The repository's tools test holds
+# raster picture, a page's head and the search engines' states — through the web layer's checks. Each is for the system alone, reached by the tool host's POST /tool-calls. The repository's tools test holds
 # every entry here to the tool answering it.
 
 [tool]

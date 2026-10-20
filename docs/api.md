@@ -25,9 +25,9 @@ flowchart TD
 
 ## Settings and data
 
-- **The data root** is the folder `--data-root` names, or `BMO_DATA_DIR` where none is named; a placed tool is
-  handed it by the tool host. This repository keeps its own folder in it, `explorer/`, and reads no other
-  (docs/store.md).
+- **The data root** is the folder `--data-root` names, or `BMO_DATA_DIR` where none is named; a placed tool
+  reads it as `BMO_DATA_DIR` of its session record (「What a placed tool reads of its record」). This repository
+  keeps its own folder in it, `explorer/`, and reads no other (docs/store.md).
 - **It reads no settings file.** What the web layer is built with stands beside the code that reads it: the
   engine roster with each engine's category and the rests after a refusal (docs/web-access.md, 「Rosters」), and
   the arguments every Chrome it starts carries (docs/web-access.md, 「How Chrome is started」).
@@ -95,8 +95,8 @@ flowchart TD
 ## The tools a tool host places
 
 Each tool is a folder of `tools/` with its own `tool.toml`, placed with the tool host and registered as this
-repository's own (`testbed.toml`, its deploy steps). The host's call protocol is the tool host's (its
-`docs/mcp-host.md`, 「A call」); every tool here speaks version 1 of it.
+repository's own (`testbed.toml`, its deploy steps). The host's call protocol is the tool host's, as its API
+0.1.0-rev.2 states it (its `docs/api.md`, 「The call protocol」); every tool here speaks version 1 of it.
 
 | Folder | Entry | Capability | What it does |
 |---|---|---|---|
@@ -108,11 +108,37 @@ repository's own (`testbed.toml`, its deploy steps). The host's call protocol is
 - **`web_search` and `web_fetch` name the helper `web`** among their shared helpers, and so does every site
   tool a site-tool repository places; the host starts one helper a record and hands its socket to every call
   naming it.
+- **No entry here declares a grant,** so a call of one is checked against the record's capabilities alone.
+
+### What a placed tool reads of its record
+
+Every call and the helper are handed the session record the tool host's `docs/api.md` states (「The session
+record」): `holderName`, `namespaces`, `capabilities`, `grants`, `shown`, `variables`, `variablesFile`, `labels`,
+`expiresAt` and `createdAt`. A record naming a field outside these does not read, and the call fails with why.
+Of it the tools read:
+
+- **`capabilities`,** which decide the form a session holds an entry in, whole or its bundle's.
+- **`BMO_DATA_DIR`,** the data root: from the record's `variables`, or from the call's environment where they
+  name none, which the host lays from its `--pass-env` and the record's `variablesFile`. A call of
+  `explorer/fetch_raster`, `explorer/fetch_page` or `explorer/search_engines` that finds none is refused naming
+  the variable, and the helper's start ends unclean naming it, which fails the call that started it.
+- **`labels.research`,** the research settings a record's web reading is held to (docs/web-access.md,
+  「Settings from the session record」), an object of four keys, each optional; any other key of it, and any
+  other label, is the issuer's and left unread. One whose keys do not read as these types ends the helper's
+  start unclean in the same way:
+
+| Key | Type | Meaning |
+|---|---|---|
+| `closesAt` | epoch milliseconds | When research closes: no search or page starts after it, and each request before it finishes inside it |
+| `strategy` | `direct-then-browser`, `browser-first` or `direct-only` | How a page is read; `direct-then-browser` where absent |
+| `hostIntervalMs` | integer | The gap between two direct requests to one host |
+| `engineIntervalMs` | integer | The gap between two requests to one engine |
 
 ### The explorer entries
 
-A caller asks the tool host, `POST /calls` at the tool host's address, with a JSON body naming the entry under
-`tool` and what it is handed under `arguments`.
+A caller asks the tool host's control socket, `POST /tool-calls` with a tool session's token whose record names
+the namespace `explorer`, with a JSON body naming the entry by `namespace` and `name` and what it is handed under
+`input` (the tool host's `docs/api.md`, 「Tool calls」).
 
 - **`explorer/fetch_raster`,** handed `address` and `pacing`, fetches the raster picture behind an address. Its
   content is one image block: the bytes in base64 under `data`, and their type under `mimeType`.
@@ -128,8 +154,8 @@ A caller asks the tool host, `POST /calls` at the tool host's address, with a JS
 - **Every address is checked before it is connected to,** and one that resolves inside this network is refused
   (docs/web-access.md, 「Address checks」). Requests are paced per host; `pacing` names whose requests are paced
   together.
-- **A `2xx` answer is the entry's tool result.** A result marked `isError` is a refusal, and its text is the
-  sentence. The waits a caller holds to are 60 seconds for a picture, 10 for a page's head and 30 for the
+- **A 200 answer carries the entry's tool result under `result`.** A result marked `isError` is a refusal, and
+  its text is the sentence. The waits a caller holds to are 60 seconds for a picture, 10 for a page's head and 30 for the
   engines.
 
 ### The web helper's socket
@@ -170,5 +196,8 @@ repository's worker:
   copies other repositories hold.
 - **bmo-artifact:** a page's import is its own (`POST /imports`), drawing the page and capturing its figures;
   this repository serves no import, and its client is what such an import reads a page through.
+- **The issuer of a research session,** whoever posts its record to the tool host's `POST /tool-sessions`: names
+  the data root as `BMO_DATA_DIR` among the record's `variables`, or has the host pass it on, and puts the
+  research settings under `labels.research` in the shape 「What a placed tool reads of its record」 states.
 - **The tool host's deployment:** the `web/research_branch`, `bmo/browse` and `bmo/remote_browser` tools this
   repository no longer places stand registered in a host they were put into until they are taken out of it.

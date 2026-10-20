@@ -97,9 +97,9 @@
 
 ### Settings from the session record
 
-- **What a record may carry:** the fetch strategy, the host and engine gaps, and a research deadline
-  (the tool host's `docs/mcp-host.md`, 「The session record」). A record that names none of them is read
-  `direct-then-browser`, at the default gaps, with no deadline.
+- **What a record may carry:** the fetch strategy, the host and engine gaps, and a research deadline,
+  under its issuer's label `research` (docs/api.md, 「What a placed tool reads of its record」). A record
+  that names none of them is read `direct-then-browser`, at the default gaps, with no deadline.
 - **After the deadline:** new searches and pages are refused, and requests before it use the deadline
   as their own. A record with no deadline is never refused on time.
 - **Unavailable search:** two `SEARCH UNAVAILABLE` in a row in one record stop further asking.

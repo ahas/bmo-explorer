@@ -143,7 +143,7 @@ pub struct Entry {
   pub hints: HintsPart,
   #[serde(default)]
   pub capabilities: Vec<String>,
-  /// The room relation a requester must hold for it to run.
+  /// The resource a session's grants must hold for a call of it to run.
   #[serde(default)]
   pub grant: Option<String>,
   #[serde(default)]
@@ -435,7 +435,7 @@ impl Manifest {
           "capabilities",
           entry.capabilities.iter().map(String::as_str).collect::<BTreeSet<_>>() == capabilities,
         ),
-        ("grant", entry.grant.as_deref() == tool.grant().map(|grant| grant.relation())),
+        ("grant", entry.grant.as_deref() == tool.grant()),
         ("system", entry.system == tool.system()),
         (
           "bundle",

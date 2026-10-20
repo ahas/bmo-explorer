@@ -5,6 +5,8 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use serde::Deserialize;
+
 use crate::tool::Session;
 use crate::web::address::Check;
 use crate::web::clock::{Clock, SystemClock};
@@ -16,9 +18,13 @@ pub const RESEARCH_CLOSED: &str = "RESEARCH CLOSED: this run's research time is 
 
 pub const SEARCH_STOPPED: &str = "SEARCH UNAVAILABLE (not asked again in this run): the search engines refused twice in a row, so another query would meet the same refusal. Work from the pages already in hand and say plainly in the result that the search itself could not run.";
 
-/// What a record's web tools are held to, as its session record says (docs/web-access.md, 「Settings from the
-/// session record」).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// The issuer's label a record's research settings stand under.
+pub const RESEARCH_LABEL: &str = "research";
+
+/// What a record's web tools are held to, as its issuer's label `research` says (docs/api.md, 「What a placed
+/// tool reads of its record」). Any other key of the label is the issuer's and left unread.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Research {
   /// Epoch milliseconds after which the web tools refuse new work; none where the record names no deadline.
   pub closes_at: Option<u64>,
@@ -29,16 +35,12 @@ pub struct Research {
 }
 
 impl Research {
-  /// The settings a record's web tools are held to.
-  pub fn of(session: &Session) -> Self {
-    let said = session.research.clone().unwrap_or_default();
-
-    Self {
-      closes_at: said.closes_at,
-      strategy: said.strategy,
-      host_interval_ms: said.host_interval_ms,
-      engine_interval_ms: said.engine_interval_ms,
-    }
+  /// The settings a record's web tools are held to: the defaults where it carries no label `research`, or
+  /// why the label does not read.
+  pub fn of(session: &Session) -> Result<Self, String> {
+    session.label(RESEARCH_LABEL).map_or(Ok(Self::default()), |said| {
+      Self::deserialize(said).map_err(|why| format!("the label `{RESEARCH_LABEL}` does not read: {why}"))
+    })
   }
 
   pub fn direct_only(&self) -> bool {
@@ -98,16 +100,17 @@ pub struct WebRun {
 }
 
 impl WebRun {
-  /// The reading a record's session opens: on the store's pacing, by the real network and resolver, its
-  /// research settings out of the record.
-  pub fn open(session: &Session) -> Self {
-    let research = Research::of(session);
+  /// The reading a record's session opens: on the store's pacing under the record's data root, by the real
+  /// network and resolver, its research settings out of the record; or why the record gives it none.
+  pub fn open(session: &Session) -> Result<Self, String> {
+    let research = Research::of(session)?;
+    let data_root = session.data_root()?;
     let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
-    Self {
+    Ok(Self {
       guard: ResearchGuard::new(research.closes_at, clock.clone()),
       session: Arc::new(WebSession::new(SessionParts {
-        store: Arc::new(StorePacing::new(crate::store::place(&session.data_root))),
+        store: Arc::new(StorePacing::new(crate::store::place(&data_root))),
         transport: crate::web::client::network(),
         check: Check {
           clock,
@@ -117,7 +120,7 @@ impl WebRun {
         browsers: None,
       })),
       research,
-    }
+    })
   }
 
   /// A reading over parts a test hands in.

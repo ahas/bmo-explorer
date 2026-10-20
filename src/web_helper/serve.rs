@@ -191,7 +191,7 @@ pub async fn one(run: Arc<WebRun>, stream: UnixStream) {
 /// The helper's whole life for the record: its reading opened, the socket bound and said on standard output,
 /// every connection answered side by side until `SIGTERM`, and the reading closed.
 pub async fn serve(session: &Session, socket: &Path) -> Result<(), String> {
-  let run = Arc::new(WebRun::open(session));
+  let run = Arc::new(WebRun::open(session)?);
   let listener =
     UnixListener::bind(socket).map_err(|why| format!("{} could not be bound: {why}", socket.display()))?;
   let mut ending =

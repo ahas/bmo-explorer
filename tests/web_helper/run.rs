@@ -39,44 +39,37 @@ fn stops_asking_the_engines_after_two_unavailable_searches_in_a_row() {
   assert_eq!(guard.search_stopped(), Some(SEARCH_STOPPED));
 }
 
-// What a run is told travels in its session record.
+// What a research run is held to travels in its session record, under its issuer's label.
 #[test]
-fn what_a_run_is_told_is_read_off_its_record() {
-  // A run's settings travel in its session record, written by the launcher and read here.
-  let session: Session = serde_json::from_value(serde_json::json!({
-    "line": "search",
-    "capabilities": ["web.read"],
-    "dataRoot": "/nowhere",
-    "archive": "/nowhere/bmo.db",
+fn what_a_run_is_held_to_is_read_off_its_record_s_label() {
+  let record = |labels: serde_json::Value| -> Session {
+    serde_json::from_value(serde_json::json!({
+      "holderName": "search", "namespaces": ["web"], "capabilities": ["web.read"], "grants": [], "createdAt": 1,
+      "labels": labels,
+    }))
+    .unwrap()
+  };
+  // The issuer's other keys stand beside the four read here and are left unread.
+  let session = record(serde_json::json!({
     "research": {
       "closesAt": 123,
-      "owner": "search-run:7",
-      "source": "search",
-      "role": "scout",
       "branches": 4,
-      "chat": -5,
       "strategy": "browser-first",
       "hostIntervalMs": 1_000,
       "engineIntervalMs": 2_000,
-      "rulebooks": ["product-search", "restaurant-search"],
     },
-  }))
-  .unwrap();
+    "owner": "search-run:7",
+  }));
 
   assert_eq!(
     Research::of(&session),
-    Research {
+    Ok(Research {
       closes_at: Some(123),
       strategy: Some("browser-first".into()),
       host_interval_ms: Some(1_000),
       engine_interval_ms: Some(2_000),
-    }
+    })
   );
-
-  let bare: Session = serde_json::from_value(
-    serde_json::json!({ "line": "chat", "capabilities": [], "dataRoot": "/", "archive": "/bmo.db" }),
-  )
-  .unwrap();
-
-  assert_eq!(Research::of(&bare), Research::default());
+  assert_eq!(Research::of(&record(serde_json::json!({}))), Ok(Research::default()));
+  assert!(Research::of(&record(serde_json::json!({ "research": { "closesAt": "soon" } }))).is_err());
 }

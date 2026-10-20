@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -7,11 +7,13 @@ import { dirname, join, resolve } from "node:path";
 // (docs/site-contract.md, 「Where a tool lives」, 「A page a tool claims」): the host serves this repository's
 // `web_search` and `web_fetch` out of a tools tree, its web helper registered as a shared helper, beside two site
 // tools of the test's own that speak the call protocol and the helper's socket on the wire. The namespace lists the
-// core tools and books the site tools, its facts catalogue the site tools, the control socket names the tool
-// claiming an address, and the wrapped page reaches the record's web helper both through the site tool's own call
-// and through `web_fetch`'s claim of its address. The wrapped page is on this machine, so the helper's address
-// policy refuses it before anything is asked of the network, and the refusal names the wrapped host, which only the
-// site tool's reading asks for.
+// core tools and books the site tools, its facts catalogue the site tools, the control socket names to the
+// session's token the tool claiming an address, and the wrapped page reaches the record's web helper both through
+// the site tool's own call and through `web_fetch`'s claim of its address. The wrapped page is on this machine, so
+// the helper's address policy refuses it before anything is asked of the network, and the refusal names the wrapped
+// host, which only the site tool's reading asks for. The session is issued at the control socket's
+// `POST /tool-sessions` with the issuer token the host made in its data root, its research settings and data root
+// in the record.
 //
 // No tool host is named in the suite, so this skips there; `BMO_LIVE_TOOL_HOST` names the installed `mcp-host`, and
 // `bmo-pocket` is the one beside it.
@@ -133,20 +135,40 @@ test.skipIf(host === "" || !existsSync(host) || !existsSync(pocket))("a placed s
 
   const said = new TextDecoder().decode((await served.stdout.getReader().read()).value);
   const port = Number(/127\.0\.0\.1:(\d+)/.exec(said)?.[1]);
-  const controlled = async (path: string, body?: unknown): Promise<unknown> => {
+  // The host makes its issuer token at its first start, readable by its own user alone, which is what makes this
+  // test an issuer (the tool host's docs/api.md, 「The control socket」).
+  const issuer = readFileSync(join(data, "tool-host", "issuer-token"), "utf8").trim();
+  const controlled = async (token: string, method: string, path: string, body?: unknown): Promise<{ status: number; said: unknown }> => {
     const answer = await fetch(`http://localhost${path}`, {
       unix: control,
-      method: body === undefined ? "GET" : "POST",
+      method,
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
 
-    return answer.json();
+    return { status: answer.status, said: await answer.json() };
   };
-  const session = { line: "search", capabilities: ["web.read", "web.sites"], shown: ["web/web_search", "web/web_fetch"], dataRoot: data };
-  const { token } = (await controlled("/sessions", session)) as { token: string };
+  // The record names the data root the web helper's store stands in, since the host hands a call none of its own.
+  const record = {
+    holderName: "tester",
+    namespaces: ["web"],
+    capabilities: ["web.read", "web.sites"],
+    grants: [],
+    shown: ["web/web_search", "web/web_fetch"],
+    variables: { BMO_DATA_DIR: data },
+    labels: { research: { strategy: "direct-only" } },
+    ttlMs: 600_000,
+  };
+  const issued = await controlled(issuer, "POST", "/tool-sessions", record);
+
+  expect(issued.status, JSON.stringify(issued.said)).toBe(201);
+
+  const { token } = issued.said as { token: string };
+  const claim = async (resource: string): Promise<unknown> => (await controlled(token, "POST", "/claims", { resource })).said;
   const listed = ((await rpc(port, token, "web", "tools/list", {})) as { tools: { name: string }[] }).tools.map((tool) => tool.name);
   const booked = await called(port, token, "toolbook", "list", {});
-  const sites = ((await controlled("/facts/web")) as { sites: { name: string; reads: string[] }[] }).sites;
+  const namespace = (await controlled(token, "GET", "/namespaces/web")).said as { facts: { sites: { name: string; reads: string[] }[] } };
+  const sites = namespace.facts.sites;
 
   // A site tool the record does not show by name is booked in the toolbook rather than listed (the tool host's
   // docs/toolbook.md).
@@ -156,10 +178,10 @@ test.skipIf(host === "" || !existsSync(host) || !existsSync(pocket))("a placed s
   expect(booked).toContain("web/board_posts");
   expect(sites.find((site) => site.name === "wrapped_pages")?.reads).toEqual(["wrap.example.com"]);
   expect(sites.find((site) => site.name === "board_posts")?.reads).toEqual(["board.example.com"]);
-  expect(await controlled("/claims", { session, address: wrapped })).toEqual({ entry: "web/wrapped_pages", arguments: { url: wrapped } });
-  expect(await controlled("/claims", { session, address: post })).toEqual({ entry: "web/board_posts", arguments: { page: post } });
+  expect(await claim(wrapped)).toEqual({ resource: wrapped, granted: true, reason: null, namespace: "web", toolName: "wrapped_pages", arguments: { url: wrapped } });
+  expect(await claim(post)).toEqual({ resource: post, granted: true, reason: null, namespace: "web", toolName: "board_posts", arguments: { page: post } });
   // An address on a claimed host that its tool does not read is no one's.
-  expect(await controlled("/claims", { session, address: "https://board.example.com/b/notes" })).toEqual({ entry: null });
+  expect(await claim("https://board.example.com/b/notes")).toMatchObject({ granted: false, namespace: null, toolName: null, arguments: null });
 
   const own = await called(port, token, "toolbook", "call", { tool: "web/wrapped_pages", arguments: { url: wrapped } });
   const claimed = await called(port, token, "web", "web_fetch", { url: wrapped });

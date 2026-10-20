@@ -1,7 +1,7 @@
 //! The `explorer` entries (docs/api.md, 「The explorer entries」): what a caller of the tool host reads of the
 //! web — a raster picture, a page's head and the search engines' states — through the web layer's checks, so
 //! every outward request keeps them. Each is for the system alone: never shown to a session, and reached by the
-//! tool host's `POST /calls`.
+//! tool host's `POST /tool-calls`.
 
 use base64::Engine;
 use schemars::JsonSchema;
@@ -86,8 +86,16 @@ impl Pacing for Paced {
   }
 }
 
-fn paced(session: &Session, pacing: &str) -> Paced {
-  Paced::new(pacing, StorePacing::new(store::place(&session.data_root)))
+// The store under the record's data root, or the refusal a call answers where the record names none.
+fn store_of(session: &Session) -> Result<StorePacing, Answer> {
+  session
+    .data_root()
+    .map(|root| StorePacing::new(store::place(&root)))
+    .map_err(|why| Answer::refusal(format!("ERROR: {why}")))
+}
+
+fn paced(session: &Session, pacing: &str) -> Result<Paced, Answer> {
+  store_of(session).map(|store| Paced::new(pacing, store))
 }
 
 // An answer's schema as the protocol wants it, the object's schema alone, as an input's is written: the draft it
@@ -133,7 +141,10 @@ impl Tool for FetchRaster {
   type Input = PacedInput;
 
   async fn call(&self, session: &Session, input: PacedInput) -> Answer {
-    let pacing = paced(session, &input.pacing);
+    let pacing = match paced(session, &input.pacing) {
+      Ok(pacing) => pacing,
+      Err(refused) => return refused,
+    };
 
     match fetch_raster(&input.address, &pacing, &Check::default(), &*network()).await {
       Ok(image) => Answer {
@@ -179,7 +190,10 @@ impl Tool for FetchPage {
   }
 
   async fn call(&self, session: &Session, input: PacedInput) -> Answer {
-    let pacing = paced(session, &input.pacing);
+    let pacing = match paced(session, &input.pacing) {
+      Ok(pacing) => pacing,
+      Err(refused) => return refused,
+    };
     let read = match page_head(&input.address, &pacing, &Check::default(), &*network()).await {
       Ok(read) => read,
       Err(why) => return Answer::refusal(format!("ERROR: {}", why.message)),
@@ -252,7 +266,10 @@ impl Tool for SearchEngines {
   }
 
   async fn call(&self, session: &Session, _input: NoInput) -> Answer {
-    let store = StorePacing::new(store::place(&session.data_root));
+    let store = match store_of(session) {
+      Ok(store) => store,
+      Err(refused) => return refused,
+    };
     let standing = match engine_standing(&store).await {
       Ok(standing) => standing,
       Err(why) => return Answer::refusal(format!("ERROR: {}", why.error)),

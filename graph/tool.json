@@ -11,12 +11,12 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "80621872f8015b43a6ee8caf1cf86d29d48116e0"
+    "base": "3b02631f2d68fcc18384bfc3f82c313a37eabd9e"
   },
   {
     "id": "tool/protocol",
     "title": "Tool host call protocol",
-    "what": "The tool host's protocol 1 as this repository speaks it: the handed call and session record, the call-back socket, the manifest held to each served entry, and what a record's tools keep. Lives in src/tool/.",
+    "what": "The tool host's protocol 1 as this repository speaks it: the session record of the host's API 0.1.0-rev.2 a call is handed, the call-back socket, the manifest held to each served entry, and what a record's tools keep. Lives in src/tool/.",
     "files": [
       "src/tool/mod.rs",
       "src/tool/protocol.rs",
@@ -40,6 +40,6 @@
     "symbols": [],
     "aliases": [],
     "needs": [],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+    "base": "3b02631f2d68fcc18384bfc3f82c313a37eabd9e"
   }
 ]

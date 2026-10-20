@@ -48,7 +48,7 @@ async fn a_call_is_asked_of_the_record_s_web_helper_and_answered_as_it_answers()
   let socket = dir.path().join("web.sock");
   let heard = helper(&socket);
   let session = Session {
-    line: "search".into(),
+    holder_name: "search".into(),
     capabilities: ["web.read".to_owned()].into(),
     ..Default::default()
   };

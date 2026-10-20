@@ -29,12 +29,12 @@ impl Tool for Shout {
   }
 
   async fn call(&self, session: &Session, input: ShoutInput) -> Answer {
-    Answer::text(format!("{}:{}", session.line, input.text.to_uppercase()))
+    Answer::text(format!("{}:{}", session.holder_name, input.text.to_uppercase()))
   }
 }
 
 fn handed(asked: Value) -> Handed {
-  let mut said = json!({ "protocol": 1, "session": { "line": "worker", "capabilities": [], "dataRoot": "/d", "archive": "/d/bmo.db" }, "callback": "/run/c.sock" });
+  let mut said = json!({ "protocol": 1, "session": { "holderName": "worker", "namespaces": [], "capabilities": [], "grants": [], "createdAt": 1 }, "callback": "/run/c.sock" });
 
   said.as_object_mut().unwrap().extend(asked.as_object().unwrap().clone());
   serde_json::from_value(said).unwrap()
@@ -196,7 +196,7 @@ async fn a_claim_request_is_answered_with_the_arguments_the_entry_reads_the_addr
   assert_eq!(claimed("worker/whisper", "https://shout.test/").await, json!({ "arguments": null }));
 }
 
-// One document, `paper://one`, read as the line of the session that reads it.
+// One document, `paper://one`, read as the holder of the session that reads it.
 struct Papers;
 
 impl Resources for Papers {
@@ -207,7 +207,7 @@ impl Resources for Papers {
   fn read<'a>(&'a self, session: &'a Session, uri: &'a str) -> Pending<'a, Result<Value, String>> {
     Box::pin(async move {
       match uri {
-        "paper://one" => Ok(json!({ "contents": [{ "uri": uri, "text": session.line }] })),
+        "paper://one" => Ok(json!({ "contents": [{ "uri": uri, "text": session.holder_name }] })),
         _ => Err(format!("no paper {uri}")),
       }
     })

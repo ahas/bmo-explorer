@@ -45,44 +45,6 @@ impl Hints {
   };
 }
 
-/// The room relation a requester must hold for a tool that acts to run: what the tool does, as the account
-/// service's rules name it. The host checks it against the
-/// sender of the message the call names, in the running turn's room (the tool host's docs/mcp-host.md, 「The grant
-/// lock」).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Grant {
-  Search,
-  Notes,
-  Memories,
-  Reminders,
-  FileTodo,
-  Approve,
-  Launch,
-  Watch,
-  RoomRules,
-  Deploy,
-  WorkerTalk,
-}
-
-impl Grant {
-  /// The relation the account service's rules name it by.
-  pub fn relation(self) -> &'static str {
-    match self {
-      Grant::Search => "search",
-      Grant::Notes => "notes",
-      Grant::Memories => "memories",
-      Grant::Reminders => "reminders",
-      Grant::FileTodo => "file_todo",
-      Grant::Approve => "approve",
-      Grant::Launch => "launch",
-      Grant::Watch => "watch",
-      Grant::RoomRules => "room_rules",
-      Grant::Deploy => "deploy",
-      Grant::WorkerTalk => "worker_talk",
-    }
-  }
-}
-
 /// A smaller form of a tool shown where a session holds a role's bundle and not the tool's whole
 /// capabilities: the bundle's capability, the arguments of the tool's own schema it shows, and those it
 /// must give where they differ from the schema's own (the tool host's docs/mcp-host.md, 「Namespaces and capabilities」).
@@ -138,8 +100,9 @@ pub trait Tool: Send + Sync + 'static {
   const HINTS: Hints;
   /// What a session must hold to be shown it, as its manifest declares it; at least one.
   const CAPABILITIES: &'static [&'static str];
-  /// The grant a requester must hold for it to run, for a tool that acts.
-  const GRANT: Option<Grant> = None;
+  /// The resource a session's grants must hold for a call of it to run, for a tool that acts (the tool
+  /// host's docs/api.md, 「The session record」).
+  const GRANT: Option<&'static str> = None;
   /// The narrower form a role's bundle holds it in, where one does; such a form acts under no grant.
   const BUNDLE: Option<Bundle> = None;
   /// Whether it is for the system alone: never shown to a session, and reached through the host's control
@@ -176,7 +139,7 @@ pub trait Served: Send + Sync {
   fn description(&self) -> &'static str;
   fn hints(&self) -> Hints;
   fn capabilities(&self) -> &'static [&'static str];
-  fn grant(&self) -> Option<Grant>;
+  fn grant(&self) -> Option<&'static str>;
   fn bundle(&self) -> Option<Bundle>;
   fn system(&self) -> bool;
   /// Its arguments for a page address it claims, where it claims the address.
@@ -236,7 +199,7 @@ impl<T: Tool> Served for T {
     T::CAPABILITIES
   }
 
-  fn grant(&self) -> Option<Grant> {
+  fn grant(&self) -> Option<&'static str> {
     T::GRANT
   }
 

@@ -295,7 +295,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-explorer"
-version = "0.1.0-rev.1"
+version = "0.1.0-rev.2"
 dependencies = [
  "avif-parse",
  "axum",
@@ -853,7 +853,7 @@ dependencies = [
 
 [[package]]
 name = "explorer-tool"
-version = "0.1.0-rev.1"
+version = "0.1.0-rev.2"
 dependencies = [
  "bmo-explorer",
  "tokio",
@@ -3845,7 +3845,7 @@ dependencies = [
 
 [[package]]
 name = "web-fetch-tool"
-version = "0.1.0-rev.1"
+version = "0.1.0-rev.2"
 dependencies = [
  "bmo-explorer",
  "tokio",
@@ -3853,7 +3853,7 @@ dependencies = [
 
 [[package]]
 name = "web-helper"
-version = "0.1.0-rev.1"
+version = "0.1.0-rev.2"
 dependencies = [
  "bmo-explorer",
  "serde_json",
@@ -3862,7 +3862,7 @@ dependencies = [
 
 [[package]]
 name = "web-search-tool"
-version = "0.1.0-rev.1"
+version = "0.1.0-rev.2"
 dependencies = [
  "bmo-explorer",
  "tokio",

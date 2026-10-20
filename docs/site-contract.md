@@ -161,7 +161,9 @@
 - **A tool names the addresses it answers for.** A descriptor may carry a claim: which page
   addresses the tool reads better than a plain fetch does, and their forms in one line.
 - **`web_fetch` asks the tool host first.** Its call-back socket answers which entry the record
-  holds claims the address, and with which arguments (the tool host's `docs/mcp-host.md`, 「A call」).
+  holds claims the address, and with which arguments (the tool host's `docs/mcp-host.md`, 「A call」);
+  a holder of the session's token asks the same of the control socket's `POST /claims` (the tool host's
+  `docs/api.md`, 「Claims」).
   An address a tool claims is answered by that tool's reading, called through the same socket and
   headed with the tool's name, so a caller that opened the page learns that the tool exists and gets
   the tool's answer in the same call.
@@ -189,9 +191,9 @@
 
 - `bmo tool sites` prints the catalogue: each tool's name, what it fetches, the site it reads, when
   it was made, its arguments and the addresses it claims. `--detail` adds the description each
-  caller shows. It prints what the running tool host says of the `web` namespace — its facts carry
-  the catalogue (the tool host's `docs/mcp-host.md`, 「What a namespace says of itself」) — which is
-  every tool that is live.
+  caller shows. It prints what the running tool host says of the `web` namespace — the `facts` its
+  control socket's `GET /namespaces/web` answers carry the catalogue as their list `sites` (the tool
+  host's `docs/mcp-host.md`, 「What a namespace says of itself」) — which is every tool that is live.
 - **The searcher is given the same list in its task**: the listing the tool host answers for the
   `web` namespace, which a search's instructions are composed with, so a tool made
   today stands in front of tomorrow's search.

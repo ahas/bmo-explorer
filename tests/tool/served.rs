@@ -28,13 +28,17 @@ impl Tool for Echo {
   type Input = EchoInput;
 
   async fn call(&self, session: &Session, input: EchoInput) -> Answer {
-    Answer::text(format!("{}:{}", session.line, input.text.repeat(input.times.unwrap_or(1).into())))
+    Answer::text(format!(
+      "{}:{}",
+      session.holder_name,
+      input.text.repeat(input.times.unwrap_or(1).into())
+    ))
   }
 }
 
 fn session(capabilities: &[&str]) -> Session {
   Session {
-    line: "worker".into(),
+    holder_name: "worker".into(),
     capabilities: capabilities.iter().map(|one| (*one).to_owned()).collect(),
     ..Default::default()
   }

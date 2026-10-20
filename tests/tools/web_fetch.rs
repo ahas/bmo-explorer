@@ -64,7 +64,7 @@ fn session(dir: &Path) -> (Session, Heard, Heard) {
   let callback = dir.join("callback.sock");
   let web = dir.join("web.sock");
   let session = Session {
-    line: "search".into(),
+    holder_name: "search".into(),
     capabilities: ["web.read".to_owned()].into(),
     ..Default::default()
   };

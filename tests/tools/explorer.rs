@@ -2,7 +2,7 @@ use std::path::Path;
 
 use bmo_explorer::store;
 use bmo_explorer::tool::manifest::Manifest;
-use bmo_explorer::tool::{Answer, Served, Session};
+use bmo_explorer::tool::{Answer, DATA_ROOT_VARIABLE, Served, Session};
 use bmo_explorer::tools::explorer::{EnginesOutput, FetchPage, FetchRaster, Paced, SearchEngines, TOOLS};
 use bmo_explorer::web::pacing::{EngineHealth, EngineState, Pacing, StorePacing};
 use bmo_explorer::web::search::roster::ROSTER;
@@ -10,8 +10,8 @@ use serde_json::json;
 
 fn session(data_root: &Path) -> Session {
   Session {
-    line: "search".into(),
-    data_root: data_root.to_path_buf(),
+    holder_name: "search".into(),
+    variables: [(DATA_ROOT_VARIABLE.to_owned(), data_root.display().to_string())].into(),
     ..Default::default()
   }
 }
