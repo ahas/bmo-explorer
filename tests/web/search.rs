@@ -53,6 +53,7 @@ async fn ask(
       category: Some(category),
       deadline_ms: None,
       engine_interval_ms: None,
+      engines: &[],
     },
     &SearchRoads {
       store,
@@ -354,6 +355,7 @@ async fn the_roster_of_each_category_is_asked_and_an_unknown_one_refused() {
       category: Some("maps"),
       deadline_ms: None,
       engine_interval_ms: None,
+      engines: &[],
     },
     &SearchRoads {
       store: &store,

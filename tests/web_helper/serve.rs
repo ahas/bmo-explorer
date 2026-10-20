@@ -34,7 +34,6 @@ fn run_of(research: Research) -> Arc<WebRun> {
       host_interval_ms: 0,
       browsers: None,
     }),
-    std::path::PathBuf::new(),
     clock,
   ))
 }
@@ -64,14 +63,8 @@ async fn a_request_is_answered_on_its_line_out_of_the_record_s_reading() {
     raw: false,
   };
   let closed: Answer = ask_line(&socket, &fetch).await.unwrap();
-  let branch: Answer = ask_line(&socket, &WebAsked::Branch { angle: "a".into() }).await.unwrap();
 
   assert_eq!(closed.plain(), RESEARCH_CLOSED);
-  assert!(
-    branch
-      .plain()
-      .starts_with("BRANCH REFUSED: this run was not launched with a branch allowance")
-  );
 }
 
 #[tokio::test]

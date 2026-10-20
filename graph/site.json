@@ -16,10 +16,10 @@
     "needs": [
       "site/helper-client",
       "site/readers",
-      "site/unread-record",
+      "site/sites",
       "tool/protocol"
     ],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
   },
   {
     "id": "site/helper-client",
@@ -67,20 +67,17 @@
     "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
   },
   {
-    "id": "site/unread-record",
-    "title": "Unread page record",
-    "what": "A page both the direct read and the real Chrome failed, written to the store with its site and shape by a research run's web helper. Lives in src/site/unread.rs.",
+    "id": "site/sites",
+    "title": "Sites named",
+    "what": "An address's site, its host without www, m or mobile, and the hosts a site tool's site line and claimed forms name. Lives in src/site/sites.rs.",
     "files": [
-      "src/site/unread.rs",
-      "tests/site/unread.rs",
+      "src/site/sites.rs",
+      "tests/site/sites.rs",
       "docs/site-contract.md"
     ],
     "symbols": [],
     "aliases": [],
-    "needs": [
-      "store/explorer-db",
-      "web/forms"
-    ],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+    "needs": [],
+    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
   }
 ]

@@ -26,7 +26,6 @@ fn reading(trusted: bool) -> WebRun {
       host_interval_ms: 0,
       browsers: None,
     }),
-    std::path::PathBuf::new(),
     clock,
   )
 }

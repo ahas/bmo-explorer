@@ -121,10 +121,37 @@ pub struct Fitted {
 /// The picture upright, fitted inside a square of `edge` pixels and never enlarged, laid on white and written
 /// as JPEG at a quality on the encoder's scale of 1 to 100.
 pub fn fitted(bytes: &[u8], edge: u32, quality: u8) -> Result<Fitted, NotAPicture> {
+  redrawn(bytes, quality, |width, height| inside(width, height, edge))
+}
+
+/// The size a picture is brought to `limit` pixels wide at, its sides in proportion, never larger than it stands.
+pub fn narrowed(width: u32, height: u32, limit: u32) -> (u32, u32) {
+  if width <= limit {
+    return (width, height);
+  }
+
+  let scaled = ((f64::from(height) * f64::from(limit) / f64::from(width)).round() as u32).max(1);
+
+  (limit, scaled)
+}
+
+/// The picture upright, brought to at most `width` pixels wide and never enlarged, laid on white and written as
+/// JPEG at a quality on the encoder's scale of 1 to 100.
+pub fn fitted_to_width(bytes: &[u8], width: u32, quality: u8) -> Result<Fitted, NotAPicture> {
+  redrawn(bytes, quality, |source_width, source_height| {
+    narrowed(source_width, source_height, width)
+  })
+}
+
+fn redrawn(
+  bytes: &[u8],
+  quality: u8,
+  size: impl Fn(u32, u32) -> (u32, u32),
+) -> Result<Fitted, NotAPicture> {
   let picture = decode(bytes)?;
   let (source_width, source_height) = (picture.width(), picture.height());
   let laid = on_white(&picture);
-  let (width, height) = inside(source_width, source_height, edge);
+  let (width, height) = size(source_width, source_height);
   let brought = if (width, height) == laid.dimensions() {
     laid
   } else {

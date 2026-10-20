@@ -10,7 +10,6 @@ mod web {
   mod chrome_proxy;
   mod client;
   mod identity;
-  mod import;
   mod jar;
   mod pacing;
   mod pdf;

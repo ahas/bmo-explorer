@@ -79,7 +79,7 @@
       "type": "object"
     }
   },
-  "description": "The search engines a research run may query, with their states, and the rest each refusal costs.",
+  "description": "The search engines a search may query, with their states, and the rest each refusal costs.",
   "properties": {
     "cooldowns": {
       "items": {

@@ -1,35 +1,24 @@
-//! The `explorer` entries (docs/api.md, 「The explorer entries」): what a service's own run reads of the web —
-//! a page drawn and read whole, a raster picture, a page's head and the search engines' states — through the
-//! web layer's checks, so every outward request keeps them. Each is for the system alone: never shown to a
-//! session, and reached by the tool host's `POST /calls`.
+//! The `explorer` entries (docs/api.md, 「The explorer entries」): what a caller of the tool host reads of the
+//! web — a raster picture, a page's head and the search engines' states — through the web layer's checks, so
+//! every outward request keeps them. Each is for the system alone: never shown to a session, and reached by the
+//! tool host's `POST /calls`.
 
 use base64::Engine;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::client::{engine_standing, is_markup, page_head};
 use crate::store;
 use crate::tool::{Answer, Content, Hints, Served, Session, Tool};
 use crate::web::address::Check;
-use crate::web::client::{Direct, decode, network};
-use crate::web::import::import_page;
-use crate::web::jar::{Jar, StoredCookie};
+use crate::web::client::{decode, network};
+use crate::web::jar::StoredCookie;
 use crate::web::pacing::{Boxed, EngineHealth, Pacing, Recipe, StorePacing};
 use crate::web::picture::fetch_raster;
-use crate::web::search::roster::ROSTER;
 
 /// Every entry the executable answers, as its manifest declares them.
-pub const TOOLS: &[&dyn Served] = &[&ImportPage, &FetchRaster, &FetchPage, &SearchEngines];
-
-/// How much of a page is read for its head: the tags a preview needs sit in the head, and a head larger than
-/// this is a page that is not going to be previewed well anyway.
-pub const PAGE_HEAD_BYTES: usize = 512 * 1024;
-
-/// How long a page's head may take to come.
-pub const PAGE_HEAD_TIMEOUT_MS: u64 = 10_000;
-
-/// Between two requests for a page's head to one host.
-pub const PAGE_HEAD_HOST_INTERVAL_MS: u64 = 250;
+pub const TOOLS: &[&dyn Served] = &[&FetchRaster, &FetchPage, &SearchEngines];
 
 // Each reads the web and changes nothing on this machine.
 const READS: Hints = Hints {
@@ -123,117 +112,6 @@ fn structured(object: &impl Serialize) -> Answer {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub struct ImportPageInput {
-  /// The page's address.
-  address: String,
-}
-
-/// A page drawn in a browser and read whole.
-#[derive(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct ImportedPageOutput {
-  pub page: PageOutput,
-  /// Each figure captured as a picture; a figure that would not capture is not among them.
-  pub captured: Vec<CapturedOutput>,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct PageOutput {
-  /// The address after every redirect.
-  pub url: String,
-  pub title: String,
-  pub keywords: Vec<String>,
-  /// The page's text.
-  pub body: String,
-  pub references: Vec<ReferenceOutput>,
-  /// Each figure the page draws.
-  pub figures: Vec<FigureOutput>,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct ReferenceOutput {
-  pub text: String,
-  pub url: String,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct FigureOutput {
-  pub n: i64,
-  pub caption: String,
-  /// The figure as the page drew it, where it drew it as SVG.
-  #[serde(default, skip_serializing_if = "Option::is_none")]
-  pub svg: Option<String>,
-}
-
-#[derive(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
-pub struct CapturedOutput {
-  pub n: i64,
-  /// The PNG's bytes, base64 encoded.
-  pub png: String,
-}
-
-/// A page drawn in a browser and read whole, with each figure it draws captured.
-pub struct ImportPage;
-
-impl Tool for ImportPage {
-  const NAME: &'static str = "import_page";
-  const NAMESPACE: &'static str = "explorer";
-  const DESCRIPTION: &'static str = "Draws a page in a browser behind the address check and reads it whole: its address after redirects, title, keywords, text, references and figures, with each figure it draws captured as a PNG.";
-  const HINTS: Hints = READS;
-  const CAPABILITIES: &'static [&'static str] = &[];
-  const SYSTEM: bool = true;
-
-  type Input = ImportPageInput;
-
-  fn output_schema() -> Option<Value> {
-    Some(schema::<ImportedPageOutput>())
-  }
-
-  async fn call(&self, _session: &Session, input: ImportPageInput) -> Answer {
-    let reading = match import_page(&input.address, Check::default().guard()).await {
-      Ok(reading) => reading,
-      Err(why) => return Answer::refusal(format!("ERROR: {}", why.message)),
-    };
-    let page = reading.page;
-    let engine = base64::engine::general_purpose::STANDARD;
-
-    structured(&ImportedPageOutput {
-      page: PageOutput {
-        url: page.url,
-        title: page.title,
-        keywords: page.keywords,
-        body: page.body,
-        references: page
-          .references
-          .into_iter()
-          .map(|reference| ReferenceOutput {
-            text: reference.text,
-            url: reference.url,
-          })
-          .collect(),
-        figures: page
-          .figures
-          .into_iter()
-          .map(|figure| FigureOutput {
-            n: figure.n,
-            caption: figure.caption,
-            svg: figure.svg,
-          })
-          .collect(),
-      },
-      captured: reading
-        .figures
-        .into_iter()
-        .map(|captured| CapturedOutput {
-          n: captured.figure.n,
-          png: engine.encode(&captured.png),
-        })
-        .collect(),
-    })
-  }
-}
-
-#[derive(Deserialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
 pub struct PacedInput {
   /// The address.
   address: String,
@@ -302,16 +180,7 @@ impl Tool for FetchPage {
 
   async fn call(&self, session: &Session, input: PacedInput) -> Answer {
     let pacing = paced(session, &input.pacing);
-    let check = Check::default();
-    let transport = network();
-    let jar = tokio::sync::Mutex::new(Jar::default());
-    let mut direct =
-      Direct::new(&pacing, &jar, check.clock.now() + PAGE_HEAD_TIMEOUT_MS, &check, &*transport);
-
-    direct.interval_ms = PAGE_HEAD_HOST_INTERVAL_MS;
-    direct.byte_cap = PAGE_HEAD_BYTES;
-
-    let read = match direct.bytes(&input.address).await {
+    let read = match page_head(&input.address, &pacing, &Check::default(), &*network()).await {
       Ok(read) => read,
       Err(why) => return Answer::refusal(format!("ERROR: {}", why.message)),
     };
@@ -320,12 +189,9 @@ impl Tool for FetchPage {
       return Answer::refusal(format!("ERROR: HTTP {} for {}", read.status, input.address));
     }
 
-    // A page that is not markup — a PDF, a raw source file — has no head to read, and that is an answer
-    // rather than a failure.
-    let markup = matches!(read.content_type.as_str(), "text/html" | "application/xhtml+xml");
-
+    // A page that is not markup has no head to read, and that is an answer rather than a failure.
     structured(&PageHeadOutput {
-      html: markup.then(|| decode(&read.bytes, &read.raw_content_type)),
+      html: is_markup(&read).then(|| decode(&read.bytes, &read.raw_content_type)),
       url: read.url,
       kind: read.raw_content_type,
     })
@@ -336,7 +202,7 @@ impl Tool for FetchPage {
 #[serde(deny_unknown_fields)]
 pub struct NoInput {}
 
-/// The search engines a research run may query, with their states, and the rest each refusal costs.
+/// The search engines a search may query, with their states, and the rest each refusal costs.
 #[derive(Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 pub struct EnginesOutput {
   pub engines: Vec<EngineOutput>,
@@ -374,7 +240,7 @@ pub struct SearchEngines;
 impl Tool for SearchEngines {
   const NAME: &'static str = "search_engines";
   const NAMESPACE: &'static str = "explorer";
-  const DESCRIPTION: &'static str = "Answers each search engine a research run may query, in the roster's order, with its state as it was last seen, and how long an engine rests for each kind of refusal.";
+  const DESCRIPTION: &'static str = "Answers each search engine a search may query, in the roster's order, with its state as it was last seen, and how long an engine rests for each kind of refusal.";
   const HINTS: Hints = READS;
   const CAPABILITIES: &'static [&'static str] = &[];
   const SYSTEM: bool = true;
@@ -387,44 +253,31 @@ impl Tool for SearchEngines {
 
   async fn call(&self, session: &Session, _input: NoInput) -> Answer {
     let store = StorePacing::new(store::place(&session.data_root));
-    let mut engines = Vec::new();
-
-    for engine in &ROSTER.engine {
-      let health = match store.health(&engine.name).await {
-        Ok(health) => health,
-        Err(why) => return Answer::refusal(format!("ERROR: the engines' states could not be read: {why}")),
-      };
-      let (state, reason, observed_at, suspended_until, elapsed_ms, result_count) = match health {
-        Some(seen) => (
-          seen.state.name().to_owned(),
-          seen.reason,
-          seen.observed_at,
-          seen.suspended_until,
-          seen.elapsed_ms,
-          seen.result_count,
-        ),
-        None => ("unknown".to_owned(), None, None, None, None, None),
-      };
-
-      engines.push(EngineOutput {
-        name: engine.name.clone(),
-        category: engine.category.clone(),
+    let standing = match engine_standing(&store).await {
+      Ok(standing) => standing,
+      Err(why) => return Answer::refusal(format!("ERROR: {}", why.error)),
+    };
+    let engines = standing
+      .engines
+      .into_iter()
+      .map(|engine| EngineOutput {
+        name: engine.name,
+        category: engine.category,
         korean_native: engine.korean_native,
-        state,
-        reason,
-        observed_at,
-        suspended_until,
-        elapsed_ms,
-        result_count,
-      });
-    }
-
-    let cooldowns = ROSTER
-      .cooldown
-      .iter()
-      .map(|line| CooldownOutput {
-        reason: line.reason.clone(),
-        ms: ROSTER.rests.named(&line.rest).unwrap_or(0),
+        state: engine.state,
+        reason: engine.reason,
+        observed_at: engine.observed_at,
+        suspended_until: engine.suspended_until,
+        elapsed_ms: engine.elapsed_ms,
+        result_count: engine.result_count,
+      })
+      .collect();
+    let cooldowns = standing
+      .cooldowns
+      .into_iter()
+      .map(|cooldown| CooldownOutput {
+        reason: cooldown.reason,
+        ms: cooldown.rest_ms,
       })
       .collect();
 

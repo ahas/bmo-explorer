@@ -45,8 +45,6 @@ pub enum WebAsked {
   },
   /// One picture by the address of its image file, answered as a picture.
   Picture { image: String },
-  /// One research branch opened for the angle, answered with its notes.
-  Branch { angle: String },
   /// A site tool's `page` road, answered with the road's result.
   Page {
     url: String,

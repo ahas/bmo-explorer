@@ -1,5 +1,4 @@
 {
-  "src/web/page_import.js": 2,
   "src/web/search/engine.rs": 3,
   "src/web/search/engines.rs": 4,
   "src/web/search/mod.rs": 1,
@@ -7,7 +6,7 @@
   "tests/repository.rs": 4,
   "tests/site/readers_markup.rs": 2,
   "tests/site/readers_plain.rs": 3,
-  "tests/site/unread.rs": 3,
+  "tests/site/sites.rs": 3,
   "tests/web/client.rs": 4,
   "tests/web/search.rs": 28,
   "tests/web/session.rs": 5

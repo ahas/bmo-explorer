@@ -3,8 +3,9 @@
 This repository keeps what its web reading must remember between processes in one SQLite database of its
 own, `explorer/explorer.db` under the data root (docs/api.md, 「Settings and data」). No other repository
 reads it; what another unit needs of it is answered through docs/api.md. The store makes its tables as it
-is first opened, and every process of this repository — the web helper of each record, a tool, a runner,
-the unit command — opens the same file, so the pacing queues hold across them.
+is first opened, and drops a table of the file that is not among them. Every process of this repository —
+the web helper of each record, a tool, the MCP server — opens the same file, so the pacing queues hold
+across them.
 
 ## The tables
 
@@ -64,23 +65,6 @@ The pacing queues (docs/web-access.md, 「Pacing」): one row per host, and one 
 | `key` | text | The host or the engine, the key |
 | `next_at` | integer | The earliest moment the next request may start |
 | `updated_at` | integer | When the row was last moved |
-
-### `page_read_failures`
-
-The pages no road read (docs/site-contract.md, 「A page the searcher could not read」).
-
-| Column | Type | Meaning |
-|---|---|---|
-| `id` | integer | The record's number, the key |
-| `site` | text | The site, the address's host as the record's site is made |
-| `url` | text, may be null | The address |
-| `shape` | text | The shape the failure took |
-| `detail` | text | What the page showed |
-| `via` | text | The roads it failed by, `direct+chrome` |
-| `run` | text, may be null | The kind of run that met it: `search` or `browse` |
-| `recorded_at` | integer | When it was written |
-
-- **The list reads the newest first,** a site at a time, so the table is indexed by `site` and `recorded_at`.
 
 ## Times
 

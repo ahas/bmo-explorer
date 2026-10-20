@@ -238,6 +238,7 @@ impl WebRun {
         category,
         deadline_ms: self.guard.deadline(),
         engine_interval_ms: self.research.engine_interval_ms,
+        engines: &[],
       },
       &SearchRoads {
         store: &**self.session.store(),

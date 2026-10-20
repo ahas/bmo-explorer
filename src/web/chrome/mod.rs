@@ -75,10 +75,6 @@ pub trait BrowserFetcher: Send + Sync {
   fn close(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
 }
 
-/// How a page is laid out when it is opened to be read whole: a desktop width, at twice the density, so a
-/// figure captured out of it stays sharp.
-pub const RENDER_VIEWPORT: (u32, u32, u32) = (1280, 900, 2);
-
 const CLOSE_WAIT: Duration = Duration::from_secs(3);
 const PROXY_CHECK_MS: u64 = 10_000;
 const SNAPSHOT_CHARS: usize = 4_000_000;
@@ -249,59 +245,6 @@ struct Inner {
 #[derive(Clone)]
 pub struct Chrome {
   inner: Arc<Inner>,
-}
-
-/// A page held open after its navigation, for a reader that asks it more than its text.
-pub struct RenderedPage {
-  pub document: BrowserDocument,
-  sender: cdp::Sender,
-}
-
-impl RenderedPage {
-  /// A value the page works out of itself.
-  pub async fn evaluate(&self, expression: &str, deadline_ms: u64) -> WebResult<Value> {
-    let raw = self
-      .sender
-      .command(
-        "Runtime.evaluate",
-        json!({ "expression": expression, "returnByValue": true, "awaitPromise": true }),
-        deadline_ms,
-      )
-      .await?;
-
-    if let Some(exception) = raw.get("exceptionDetails") {
-      let said = exception["exception"]["description"]
-        .as_str()
-        .or(exception["text"].as_str())
-        .unwrap_or("script error");
-
-      return Err(WebError::new(format!("the page could not work it out: {said}"), Failure::Transport));
-    }
-
-    Ok(raw["result"]["value"].clone())
-  }
-
-  /// One region of the page as PNG bytes, in CSS pixels from the document's top left.
-  pub async fn screenshot(&self, clip: (f64, f64, f64, f64), deadline_ms: u64) -> WebResult<Vec<u8>> {
-    use base64::Engine;
-
-    let (x, y, width, height) = clip;
-    let shot = self
-      .sender
-      .command(
-        "Page.captureScreenshot",
-        json!({ "format": "png", "captureBeyondViewport": true, "clip": { "x": x, "y": y, "width": width, "height": height, "scale": 1 } }),
-        deadline_ms,
-      )
-      .await?;
-    let data = shot["data"]
-      .as_str()
-      .ok_or_else(|| WebError::new("Chrome returned no screenshot", Failure::Transport))?;
-
-    base64::engine::general_purpose::STANDARD.decode(data).map_err(|why| {
-      WebError::new(format!("Chrome returned an unreadable screenshot: {why}"), Failure::Transport)
-    })
-  }
 }
 
 fn snapshot_expression() -> String {
@@ -819,66 +762,6 @@ impl Chrome {
         let held = this.ensure(running, deadline_ms).await?;
 
         this.navigate(held, url, deadline_ms, &options).await
-      })
-      .await
-  }
-
-  /// Opens the page at the reading viewport and hands it to `reading` while nothing else navigates this
-  /// browser. Redirects are followed to the end: the page is read once its address has stopped moving,
-  /// whether an HTTP answer, a refresh or a script moved it. The viewport is put back after.
-  pub async fn inspect<T, F, Fut>(&self, url: &str, deadline_ms: u64, reading: F) -> WebResult<T>
-  where
-    F: FnOnce(RenderedPage) -> Fut,
-    Fut: Future<Output = WebResult<T>>,
-  {
-    let this = self.clone();
-
-    self
-      .queued(async move |running: &mut Option<Running>| {
-        let held = this.ensure(running, deadline_ms).await?;
-        let sender = held.sender().clone();
-        let (width, height, scale) = RENDER_VIEWPORT;
-
-        sender
-          .command(
-            "Emulation.setDeviceMetricsOverride",
-            json!({ "width": width, "height": height, "deviceScaleFactor": scale, "mobile": false }),
-            deadline_ms,
-          )
-          .await?;
-
-        let read = async {
-          let mut document = this.navigate(held, url, deadline_ms, &FetchOptions::default()).await?;
-
-          for _ in 0..8 {
-            if now_ms() + 500 >= deadline_ms {
-              break;
-            }
-
-            tokio::time::sleep(Duration::from_millis(500)).await;
-
-            let next = Self::snapshot(&sender, &held.watch, deadline_ms).await?;
-
-            if next.url == document.url {
-              break;
-            }
-
-            (this.inner.guard)(next.url.clone(), deadline_ms).await?;
-            document = next;
-          }
-
-          reading(RenderedPage {
-            document,
-            sender: sender.clone(),
-          })
-          .await
-        };
-        let answered = read.await;
-        let _ = sender
-          .command("Emulation.clearDeviceMetricsOverride", json!({}), now_ms() + 2_000)
-          .await;
-
-        answered
       })
       .await
   }

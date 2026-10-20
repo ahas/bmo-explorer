@@ -1,21 +1,8 @@
 [
   {
-    "id": "helper/branches",
-    "title": "Research branches",
-    "what": "A research branch opened from the web helper for an angle, run by the bmo research-branch command, and stopped as the record closes. Lives in src/web_helper/branch.rs.",
-    "files": [
-      "src/web_helper/branch.rs",
-      "docs/api.md"
-    ],
-    "symbols": [],
-    "aliases": [],
-    "needs": [],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
-  },
-  {
     "id": "helper/web-helper",
     "title": "Web helper",
-    "what": "The shared helper holding one record's web reading: its research close, its session and Chrome, the roads a site tool reaches its site by, and the unread pages it writes. Lives in src/web_helper/ and tools/_shared/web.",
+    "what": "The shared helper holding one record's web reading: its research close, its session and Chrome, and the roads a site tool reaches its site by. Lives in src/web_helper/ and tools/_shared/web.",
     "files": [
       "src/web_helper/mod.rs",
       "src/web_helper/run.rs",
@@ -35,10 +22,8 @@
     "needs": [
       "web/session",
       "web/search-engines",
-      "site/helper-client",
-      "site/unread-record",
-      "helper/branches"
+      "site/helper-client"
     ],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
   }
 ]

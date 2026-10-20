@@ -57,6 +57,8 @@ pub struct Search<'a> {
   pub category: Option<&'a str>,
   pub deadline_ms: Option<u64>,
   pub engine_interval_ms: Option<u64>,
+  /// The engines to ask by their roster names, in place of the category's; the category's where it is empty.
+  pub engines: &'a [&'a str],
 }
 
 /// What a search is asked through.
@@ -196,7 +198,11 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
     .filter(|category| !category.is_empty())
     .unwrap_or("general");
   let language = search_language(search.query, search.language);
-  let roster = engines_for(category);
+  let roster = if search.engines.is_empty() {
+    engines_for(category)
+  } else {
+    ENGINES.iter().copied().filter(|one| search.engines.contains(&one.name())).collect()
+  };
 
   if roster.is_empty() {
     return Err(WebError::new(format!("Unsupported search category: {category}"), Failure::Transport));

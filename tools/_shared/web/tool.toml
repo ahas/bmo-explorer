@@ -1,5 +1,5 @@
-# The web helper: one record's web reading — its research close, its web session with the standard Chrome a
-# fetch falls back to, and its branches — which the web's core tools and every site tool ask on its socket
+# The web helper: one record's web reading — its research close and its web session with the standard Chrome a
+# fetch falls back to — which the web's core tools and every site tool ask on its socket
 # (docs/site-contract.md, 「The web helper's socket」).
 
 [tool]
@@ -12,4 +12,4 @@ run = ["web-helper"]
 timeout = 30
 
 [helper]
-description = "One record's web reading: its research close, its web session and Chrome, and its branches."
+description = "One record's web reading: its research close, and its web session and Chrome."

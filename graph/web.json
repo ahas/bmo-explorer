@@ -18,7 +18,7 @@
   {
     "id": "web/chrome",
     "title": "Real Chrome reading",
-    "what": "The standard Chrome a fetch falls back to and a site tool renders in: its profile, places, display, proxy and DevTools connection, and a page imported whole as the browser draws it. Lives in src/web/chrome/ and src/web/import.rs.",
+    "what": "The standard Chrome a fetch falls back to and a site tool renders in: its profile, places, display, proxy and DevTools connection. Lives in src/web/chrome/.",
     "files": [
       "src/web/chrome/mod.rs",
       "src/web/chrome/cdp.rs",
@@ -28,14 +28,11 @@
       "src/web/chrome/places.rs",
       "src/web/chrome/profile.rs",
       "src/web/chrome/proxy.rs",
-      "src/web/import.rs",
-      "src/web/page_import.js",
       "tests/web/chrome.rs",
       "tests/web/chrome_display.rs",
       "tests/web/chrome_places.rs",
       "tests/web/chrome_profile.rs",
       "tests/web/chrome_proxy.rs",
-      "tests/web/import.rs",
       "docs/web-access.md"
     ],
     "symbols": [],
@@ -44,7 +41,7 @@
       "web/address-checks",
       "web/forms"
     ],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
   },
   {
     "id": "web/forms",

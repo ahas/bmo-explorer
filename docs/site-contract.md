@@ -14,9 +14,8 @@
 
 ## What becomes one
 
-- **Only what the owner asks for.** A tool is made where the owner orders one, having read the list of
-  pages no road read (「A page the searcher could not read」) or for a lookup of their own. Nothing raises
-  a tool's row by itself: a tool for every site a search meets would be a tool for every site there is.
+- **Only what is asked for.** A tool is made where its maintainer orders one. Nothing raises a tool's
+  row by itself: a tool for every site a search meets would be a tool for every site there is.
 - **A lookup that comes round again.** The same site, the same kind of value, asked for a second
   and a third time. The search history bmo-artifact keeps is where that is read off: a question asked
   three times over a fortnight is the clearest case there is.
@@ -40,8 +39,8 @@
 - **The site contract is a module of this repository:** the site-tool trait, the roads a tool is
   given (「What a tool is given」) and the stand-in a test reads its fixtures through, the client a
   placed tool reaches the web helper by and the wrapper serving a site tool as a placed entry, the
-  readings several tools share — markup, scripts, numbers, journals, the forum engines — and a page no
-  road read as it is recorded. This repository's own tools and the web helper link it.
+  readings several tools share — markup, scripts, numbers, journals, the forum engines. This
+  repository's own tools and the web helper link it.
 - **A site tool of another repository stands on the wire, not on this code:** it speaks the tool host's
   call protocol and asks the record's web helper on its socket, in the shapes 「The web helper's socket」
   states. Nothing of this repository is a dependency of it.
@@ -70,8 +69,8 @@
     anywhere is told about it.
 - **The tool host serves every site tool** under the `web` namespace out of its registry, beside the
   web's core tools (the tool host's `docs/mcp-host.md`, 「What a record's tools keep」), each asking for
-  `web.sites`, which only the searcher role gives, so every research run — a search, a branch, a browse —
-  is shown the same tools with no list of its own, and no other line is shown them.
+  `web.sites`, which only the searcher role gives, so every research session is shown the same tools
+  with no list of its own, and no other line is shown them.
 
 ## What placing a tool costs
 
@@ -125,8 +124,7 @@
     and its answer counts as a search;
   - a failure is answered as the reading answers a failed page, a read cut short by the research
     close said as the close.
-- **Only `web_fetch` writes an unread page** (「A page the searcher could not read」); a tool's
-  failed road is its own to say in its answer, and none of its roads writes one.
+- **A tool's failed road is its own to say in its answer;** nothing of it is written down.
 
 ## The web helper's socket
 
@@ -141,7 +139,6 @@
 | `search` | `query`, `count?`, `language?`, `category?` | the tool result of a web search |
 | `fetch` | `url`, `offset?`, `max_chars?`, `raw` (false where absent) | the tool result of a page read |
 | `picture` | `image`, the address of an image file | the tool result holding the picture |
-| `branch` | `angle` | the tool result holding the branch's notes (docs/api.md, 「bmo-artifact」) |
 | `page` | `url`, `request?`: `body?` and `headers`, a list of name and value pairs | the road's result: the body |
 | `rendered` | `url`, `fresh` (a browser of its own; false where absent), `arrival?` | the road's result: `url`, `status`, `html` and `text` |
 | `engine` | `query`, `count` | the road's result: the search's `hits`, `unresponsive`, `off_topic` and `health` |
@@ -196,7 +193,7 @@
   the catalogue (the tool host's `docs/mcp-host.md`, 「What a namespace says of itself」) — which is
   every tool that is live.
 - **The searcher is given the same list in its task**: the listing the tool host answers for the
-  `web` namespace, which a search's and a branch's instructions are composed with, so a tool made
+  `web` namespace, which a search's instructions are composed with, so a tool made
   today stands in front of tomorrow's search.
 - **Read it before writing one.** It is the one place that answers whether a lookup is already
   covered, and it cannot go out of step with the code, because it is the code.
@@ -219,67 +216,7 @@
 - **A search asks for no new tool.** A site no tool covers is read with the web tools, and what
   could not be read is said in `UNCONFIRMED:`.
 
-## A page the searcher could not read
-
-- **A page no road read is written down, and nothing more.** A failed page raises no row and makes no
-  tool; it stands in one list the owner reads, and a tool is made only where the owner asks for one
-  (「What becomes one」).
-- **Only the research runs are recorded.** A search run, its branches and a browse run are; a chat
-  session's or a job's own reading of the web is not.
-
-### What is written
-
-- **A page both roads failed.** The web helper of a research run writes a `web_fetch` failure into
-  this repository's store only where the direct read failed and the real Chrome, opened after it,
-  failed the page too. The fetch says so on the error it fails with, and nothing else is written:
-  - a direct read that failed in a way Chrome would not change — a 404, a 5xx, a connection that
-    drew no answer, a page timing out — never reaches Chrome and is not written;
-  - a run reading direct only, or Chrome first, tries one road alone and writes nothing;
-  - a failure that is this machine's own — the research closing, the pacing running past a
-    deadline, Chrome not starting, an address refused as unsafe, a body too large — is not the
-    site's and is not written.
-- **What a record holds:** the site, the address, the shape the failure took, what the page
-  showed, the roads it failed by (`direct+chrome`), which kind of run met it, and when
-  (docs/store.md, `page_read_failures`).
-- **What a run's result says is not read.** A page a run judged thin, a lookup it thought worth a
-  tool and a page the browse agent's own Chrome could not get past are said in its result for the
-  room, and written nowhere.
-- **An address this machine's own policy refused says so in its answer.** The `ERROR` a tool gives
-  for it names the refusal as this machine's, made before the site was asked.
-
-### The shapes
-
-| Shape | What stood in the way in Chrome |
-|---|---|
-| `script-only` | The page is drawn by script and its text holds no body |
-| `challenge` | A CAPTCHA or browser check, whatever status it came with |
-| `login` | A login page, or 401 |
-| `refused` | 403, 405, 418 and their kin, or a block of no other shape |
-| `rate-limited` | 429 |
-| `timeout` | The page did not finish in time |
-| `paywall` | 402 |
-| `gone` | 404 or 410 |
-| `server-error` | 5xx |
-| `other` | Any other status the page was blocked with |
-
-### The site a record belongs to
-
-- **The site is the address's host,** lower-cased, with a leading `www.`, `m.` or `mobile.` dropped,
-  so a site's desktop and mobile pages are one site.
-
-### The list of pages no road read
-
-- **`bmo tool unread-pages` prints it,** a site at a time, the most recently failed first:
-  how many times its pages failed, the first and the last time, the last address with its shape
-  and run kind, and what that page showed.
-- **A site a catalogue tool reads is marked with the tool.** A failure there is the tool's to
-  repair, since `web_fetch` hands an address its tool claims to the tool. The tool is the one the
-  tool host says claims the last address, or else the one whose catalogue entry names the site among
-  those it reads: the hosts its site line and its claimed forms name.
-- **The list is all there is.** Nothing settles a record, raises a row or tells the agent; a record
-  stands in the store's `page_read_failures` table for as long as the store keeps it.
-
-### Sites with no road
+## Sites with no road
 
 - **A site a job found no road into is written here,** with what it answers, so a job that meets
   it again reads why nothing reads it before probing it afresh.

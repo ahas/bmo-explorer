@@ -1,6 +1,5 @@
-# The explorer entries (docs/api.md, 「The explorer entries」): what a service's own run reads of the web — a page
-# drawn and read whole, a raster picture, a page's head and the search engines' states — through the web layer's
-# checks. Each is for the system alone, reached by the tool host's POST /calls. The repository's tools test holds
+# The explorer entries (docs/api.md, 「The explorer entries」): what a caller of the tool host reads of the web — a
+# raster picture, a page's head and the search engines' states — through the web layer's checks. Each is for the system alone, reached by the tool host's POST /calls. The repository's tools test holds
 # every entry here to the tool answering it.
 
 [tool]
@@ -11,15 +10,6 @@ build = 'cargo build --release -p explorer-tool && cp "$BMO_CARGO_TARGET/release
 check = 'cargo test --test tools'
 run = ["explorer-tool"]
 timeout = 180
-
-[[entry]]
-namespace = "explorer"
-name = "import_page"
-description = "Draws a page in a browser behind the address check and reads it whole: its address after redirects, title, keywords, text, references and figures, with each figure it draws captured as a PNG."
-input = "import_page.json"
-output = "import_page.output.json"
-hints = { read_only = true, open_world = true }
-system = true
 
 [[entry]]
 namespace = "explorer"
@@ -41,7 +31,7 @@ system = true
 [[entry]]
 namespace = "explorer"
 name = "search_engines"
-description = "Answers each search engine a research run may query, in the roster's order, with its state as it was last seen, and how long an engine rests for each kind of refusal."
+description = "Answers each search engine a search may query, in the roster's order, with its state as it was last seen, and how long an engine rests for each kind of refusal."
 input = "search_engines.json"
 output = "search_engines.output.json"
 hints = { read_only = true, open_world = true }

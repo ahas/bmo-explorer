@@ -1,20 +1,17 @@
-# The workspace and the repository's own package, `bmo-explorer`: the web reading, the site contract, the browse
-# and remote-browser runs and the unit command, as modules of one crate under `src/`. Each tool the tool host
+# The workspace and the repository's own package, `bmo-explorer`: the web reading, its client and MCP server, the
+# site contract and the unit command, as modules of one crate under `src/`. Each tool the tool host
 # places is a member of its own under `tools/`, since each is an executable the host starts by its manifest.
 [workspace]
 members = [
   "tools/_shared/web",
-  "tools/browse",
   "tools/explorer",
-  "tools/remote_browser",
-  "tools/research_branch",
   "tools/web_fetch",
   "tools/web_search",
 ]
 resolver = "3"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-rev.1"
 edition = "2024"
 publish = false
 
@@ -24,9 +21,8 @@ axum = "0.8.4"
 base64 = "0.22.1"
 bytes = "1.10.1"
 chrono = { version = "0.4.41", default-features = false, features = ["std"] }
-clap = { version = "4.5.40", features = ["derive"] }
+clap = { version = "4.5.40", features = ["derive", "env"] }
 cookie = "0.18.1"
-dotenvy = "0.15.7"
 ego-tree = "0.10.0"
 encoding_rs = "0.8.42"
 futures-util = "0.3.34"
@@ -47,6 +43,7 @@ pulldown-cmark = { version = "0.13.0", default-features = false }
 rand = "0.9.2"
 rav1d = { version = "1.1.0", default-features = false, features = ["bitdepth_8", "bitdepth_16"] }
 regex = "1.11.1"
+rmcp = { version = "3.5.0", default-features = false, features = ["server", "transport-io"] }
 reqwest = { version = "0.13.5", features = ["json", "query"] }
 roxmltree = "0.21.1"
 schemars = "1.0.4"
@@ -54,9 +51,7 @@ scraper = "0.25.0"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.140", features = ["raw_value"] }
 serde_xmlrpc = "0.3.0-alpha.2"
-sha2 = "0.10.9"
 simplecss = "0.2.2"
-sse-stream = "0.2.6"
 sqlx = { version = "0.8.6", default-features = false, features = ["sqlite", "runtime-tokio"] }
 tempfile = "3.20.0"
 tokio = { version = "1.47.0", features = ["macros", "rt", "rt-multi-thread", "net", "time", "signal", "io-util", "process"] }
@@ -67,7 +62,7 @@ yuv = "0.8.19"
 
 [package]
 name = "bmo-explorer"
-description = "The web tools a tool host serves, the browse and remote-browser runs, and their unit command."
+description = "Web reading as an upstream: its client, its MCP server, the web tools a tool host places and the site contract."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -83,8 +78,6 @@ chrono.workspace = true
 # The unit command's words.
 clap.workspace = true
 cookie.workspace = true
-# A remote hub's token file, an environment file.
-dotenvy.workspace = true
 # A page's markup read as a tree, for what it is and the text a reader sees of it.
 ego-tree.workspace = true
 encoding_rs.workspace = true
@@ -107,6 +100,8 @@ oxc_span.workspace = true
 percent-encoding.workspace = true
 rand.workspace = true
 regex.workspace = true
+# The MCP server a harness starts, on standard input and output.
+rmcp.workspace = true
 reqwest = { workspace = true, features = ["gzip", "brotli", "deflate", "zstd", "stream"] }
 roxmltree.workspace = true
 # A tool's input read as a JSON schema the host shows.
@@ -118,21 +113,17 @@ serde_json.workspace = true
 serde_xmlrpc.workspace = true
 # An element's inline style read for where it places a piece of text.
 simplecss.workspace = true
-# The hash a remote browser's node helper is kept under.
-sha2.workspace = true
-# A remote hub's answer to an exec, an event stream.
-sse-stream.workspace = true
 # This repository's own store (docs/store.md).
 sqlx.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
-# The steps a remote browser's launch hands its command, in a file only its owner reads.
-tempfile.workspace = true
 # The settings built in beside the modules that read them.
 toml.workspace = true
 url.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
+# A test's own folder and files, gone with it.
+tempfile.workspace = true
 # The README's folder table, read as markdown.
 pulldown-cmark.workspace = true

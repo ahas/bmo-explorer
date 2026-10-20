@@ -1,11 +1,9 @@
 //! One record's web reading (docs/web-access.md, 「One session, one investigation」): its research close and
-//! the search refusals it has met, its session — the direct client's jar, the pacing, the real Chrome it falls
-//! back to — and the branches it has opened. A record holds one, in its web helper, which opens it as it starts
-//! and closes it as it ends.
+//! the search refusals it has met, and its session — the direct client's jar, the pacing, the real Chrome it
+//! falls back to. A record holds one, in its web helper, which opens it as it starts and closes it as it ends.
 
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use crate::tool::Session;
 use crate::web::address::Check;
@@ -14,30 +12,20 @@ use crate::web::pacing::StorePacing;
 use crate::web::session::{FetchPage, FetchSlice, SessionParts, WebSession};
 use crate::web::{Failure, WebError, WebResult};
 
-use crate::site::unread::{Unread, fetch_error_text, fetch_failure_shape, record, site_of};
-
-pub const RESEARCH_CLOSED: &str = "RESEARCH CLOSED: this run's research time is over, so no new search, page or branch is started. Write the result now from what you already have, citing only pages that were actually read, and say plainly what could not be confirmed.";
+pub const RESEARCH_CLOSED: &str = "RESEARCH CLOSED: this run's research time is over, so no new search or page is started. Write the result now from what you already have, citing only pages that were actually read, and say plainly what could not be confirmed.";
 
 pub const SEARCH_STOPPED: &str = "SEARCH UNAVAILABLE (not asked again in this run): the search engines refused twice in a row, so another query would meet the same refusal. Work from the pages already in hand and say plainly in the result that the search itself could not run.";
 
-/// What a research run's web tools are held to, as its session record says (docs/web-access.md, 「Settings from the research run」).
+/// What a record's web tools are held to, as its session record says (docs/web-access.md, 「Settings from the
+/// session record」).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Research {
-  /// Epoch milliseconds after which the web tools refuse new work; none outside a research run.
+  /// Epoch milliseconds after which the web tools refuse new work; none where the record names no deadline.
   pub closes_at: Option<u64>,
-  /// The pool owner its branches are held under.
-  pub owner: Option<String>,
-  /// `search` or `browse`: the kind of run, under which a page it could not read is recorded.
-  pub source: Option<String>,
-  pub role: Option<String>,
-  pub max_children: u32,
-  pub chat_id: i64,
   /// How pages are read: `direct-then-browser` where none is named, `browser-first` or `direct-only`.
   pub strategy: Option<String>,
   pub host_interval_ms: Option<u64>,
   pub engine_interval_ms: Option<u64>,
-  /// The rulebooks the run reads whole by name.
-  pub rulebooks: Vec<String>,
 }
 
 impl Research {
@@ -47,15 +35,9 @@ impl Research {
 
     Self {
       closes_at: said.closes_at,
-      owner: said.owner,
-      source: said.source.filter(|source| source == "search" || source == "browse"),
-      role: said.role,
-      max_children: said.branches.unwrap_or(0),
-      chat_id: said.chat.unwrap_or(0),
       strategy: said.strategy,
       host_interval_ms: said.host_interval_ms,
       engine_interval_ms: said.engine_interval_ms,
-      rulebooks: said.rulebooks,
     }
   }
 
@@ -113,12 +95,6 @@ pub struct WebRun {
   pub research: Research,
   pub guard: ResearchGuard,
   pub session: Arc<WebSession>,
-  /// The store a page no road read is written into (docs/store.md).
-  pub store: PathBuf,
-  /// How many branches this run has opened, and the processes of those still running.
-  pub opened: AtomicU64,
-  pub branches: Mutex<Vec<u32>>,
-  pub closing: std::sync::atomic::AtomicBool,
 }
 
 impl WebRun {
@@ -140,24 +116,16 @@ impl WebRun {
         host_interval_ms: research.host_interval_ms.unwrap_or(crate::web::client::DIRECT_HOST_INTERVAL_MS),
         browsers: None,
       })),
-      store: crate::store::place(&session.data_root),
       research,
-      opened: AtomicU64::new(0),
-      branches: Mutex::new(Vec::new()),
-      closing: std::sync::atomic::AtomicBool::new(false),
     }
   }
 
   /// A reading over parts a test hands in.
-  pub fn with(research: Research, session: WebSession, store: PathBuf, clock: Arc<dyn Clock>) -> Self {
+  pub fn with(research: Research, session: WebSession, clock: Arc<dyn Clock>) -> Self {
     Self {
       guard: ResearchGuard::new(research.closes_at, clock),
       session: Arc::new(session),
-      store,
       research,
-      opened: AtomicU64::new(0),
-      branches: Mutex::new(Vec::new()),
-      closing: std::sync::atomic::AtomicBool::new(false),
     }
   }
 
@@ -187,36 +155,6 @@ impl WebRun {
       .await
   }
 
-  /// A page this run could not read by the direct read nor the real Chrome after it, written down; a failure
-  /// that is this machine's own is no page's, and writing it down never costs the fetch its answer.
-  pub async fn note_unread(&self, url: &str, error: &WebError) {
-    let Some(run) = self.research.source.as_deref() else { return };
-
-    if self.guard.closed().is_some() {
-      return;
-    }
-
-    let (Some((shape, detail)), Some(site)) = (fetch_failure_shape(error), site_of(url)) else {
-      return;
-    };
-    let written = record(
-      &self.store,
-      &Unread {
-        site: &site,
-        url,
-        shape,
-        detail: &detail,
-        run,
-        recorded_at: crate::web::clock::now_ms(),
-      },
-    )
-    .await;
-
-    if let Err(why) = written {
-      eprintln!("unread page not recorded: {why}");
-    }
-  }
-
   /// What a failed request answers: the research close where that is what it ran into, the error otherwise.
   pub fn closed_or(&self, error: &WebError) -> crate::tool::Answer {
     if error.kind == Failure::Deadline && self.guard.closed().is_some() {
@@ -226,21 +164,20 @@ impl WebRun {
     }
   }
 
-  /// The run's branches stopped and its browser and profile ended, as its record goes.
+  /// The run's browser and profile ended, as its record goes.
   pub async fn close(&self) {
-    self.closing.store(true, Ordering::SeqCst);
-
-    let live: Vec<u32> =
-      std::mem::take(&mut *self.branches.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
-
-    for pid in live {
-      // SAFETY: a signal to a branch process this run started and still counts as running; the branch's own
-      // verb gives its pool place back as it stops.
-      unsafe {
-        libc::kill(pid as i32, libc::SIGTERM);
-      }
-    }
-
     self.session.close().await;
+  }
+}
+
+/// The ERROR a web tool answers with. An address this machine's own policy refused is said to be the
+/// machine's, so the caller does not take the page for one its site would not serve.
+pub fn fetch_error_text(error: &WebError) -> String {
+  let text = format!("ERROR: {}", error.message);
+
+  if error.kind == Failure::UnsafeAddress {
+    format!("{text}\nThis machine's own address policy refused it before the site was asked.")
+  } else {
+    text
   }
 }

@@ -36,17 +36,14 @@ command = "cargo fmt --all --check"
 [tools]
 dir = "tools"
 
-# The unit command and each tool's executable go into a release's bin/.
+# The unit command, which serves the MCP server, and each tool's executable go into a release's bin/.
 [build]
 binaries = [
   "bmo-explorer",
   "web-search-tool",
   "web-fetch-tool",
-  "research-branch-tool",
   "web-helper",
   "explorer-tool",
-  "browse-tool",
-  "remote-browser-tool",
 ]
 
 # The repository runs no service of its own: a deployment places its tools with the tool host and its unit
@@ -103,17 +100,6 @@ bmo pocket put tools/web_fetch/.placed --placed --service bmo-explorer --allow w
 '''
 
 [[deploy.step]]
-id = "register-research-branch"
-phase = "before-flip"
-command = '''
-set -eu
-rm -rf tools/research_branch/.placed
-mkdir -p tools/research_branch/.placed
-cp bin/research-branch-tool tools/research_branch/tool.toml tools/research_branch/*.json tools/research_branch/.placed/
-bmo pocket put tools/research_branch/.placed --placed --service bmo-explorer --allow web.branches
-'''
-
-[[deploy.step]]
 id = "register-explorer"
 phase = "before-flip"
 command = '''
@@ -122,26 +108,4 @@ rm -rf tools/explorer/.placed
 mkdir -p tools/explorer/.placed
 cp bin/explorer-tool tools/explorer/tool.toml tools/explorer/*.json tools/explorer/.placed/
 bmo pocket put tools/explorer/.placed --placed --service bmo-explorer
-'''
-
-[[deploy.step]]
-id = "register-browse"
-phase = "before-flip"
-command = '''
-set -eu
-rm -rf tools/browse/.placed
-mkdir -p tools/browse/.placed
-cp bin/browse-tool tools/browse/tool.toml tools/browse/*.json tools/browse/.placed/
-bmo pocket put tools/browse/.placed --placed --service bmo-explorer --allow room.tools --allow search
-'''
-
-[[deploy.step]]
-id = "register-remote-browser"
-phase = "before-flip"
-command = '''
-set -eu
-rm -rf tools/remote_browser/.placed
-mkdir -p tools/remote_browser/.placed
-cp bin/remote-browser-tool tools/remote_browser/tool.toml tools/remote_browser/*.json tools/remote_browser/.placed/
-bmo pocket put tools/remote_browser/.placed --placed --service bmo-explorer --allow room.tools --allow launch
 '''

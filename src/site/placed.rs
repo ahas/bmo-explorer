@@ -73,7 +73,7 @@ pub fn listing_order(since: &str) -> i64 {
 
 /// The sites a tool reads: the hosts its site line and its claimed forms name.
 pub fn sites_read(site: &str, forms: Option<&str>) -> Vec<String> {
-  crate::site::unread::sites_named_in(&format!("{site} {}", forms.unwrap_or("")))
+  crate::site::sites::sites_named_in(&format!("{site} {}", forms.unwrap_or("")))
 }
 
 /// The hosts a placed site tool's manifest claims: those its forms name, then those its trait adds.

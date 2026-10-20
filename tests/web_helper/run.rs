@@ -67,15 +67,9 @@ fn what_a_run_is_told_is_read_off_its_record() {
     Research::of(&session),
     Research {
       closes_at: Some(123),
-      owner: Some("search-run:7".into()),
-      source: Some("search".into()),
-      role: Some("scout".into()),
-      max_children: 4,
-      chat_id: -5,
       strategy: Some("browser-first".into()),
       host_interval_ms: Some(1_000),
       engine_interval_ms: Some(2_000),
-      rulebooks: vec!["product-search".into(), "restaurant-search".into()],
     }
   );
 

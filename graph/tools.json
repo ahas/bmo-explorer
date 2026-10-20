@@ -2,7 +2,7 @@
   {
     "id": "tools/explorer-entries",
     "title": "Explorer entries",
-    "what": "The system-only entries another unit reads the web through: a page drawn and imported whole, a raster picture, a page head and the engines' states. Lives in src/tools/explorer.rs and tools/explorer/.",
+    "what": "The system-only entries a tool host's caller reads the web through: a raster picture, a page head and the engines' states, on the client's functions. Lives in src/tools/explorer.rs and tools/explorer/.",
     "files": [
       "src/tools/explorer.rs",
       "tools/explorer/main.rs",
@@ -13,52 +13,13 @@
     "symbols": [],
     "aliases": [],
     "needs": [
-      "web/session",
+      "unit/client",
       "web/address-checks",
       "web/pacing",
-      "web/chrome",
       "web/pictures",
-      "web/search-engines",
       "tool/protocol"
     ],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
-  },
-  {
-    "id": "tools/launching",
-    "title": "Run launching tools",
-    "what": "What the browse and remote_browser entries share: the turn a call is made in, the sync or async mode, and the run handed to the bmo-explorer unit command. Lives in src/tools/launching.rs.",
-    "files": [
-      "src/tools/mod.rs",
-      "src/tools/launching.rs",
-      "docs/api.md"
-    ],
-    "symbols": [],
-    "aliases": [],
-    "needs": [
-      "tool/protocol",
-      "unit/command"
-    ],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
-  },
-  {
-    "id": "tools/research-branch",
-    "title": "research_branch tool",
-    "what": "The entry a search run opens a research branch by, asked of the record's web helper. Lives in src/tools/research_branch.rs and tools/research_branch/.",
-    "files": [
-      "src/tools/research_branch.rs",
-      "tools/research_branch/main.rs",
-      "tools/research_branch/tool.toml",
-      "tests/tools/research_branch.rs",
-      "docs/api.md"
-    ],
-    "symbols": [],
-    "aliases": [],
-    "needs": [
-      "site/helper-client",
-      "helper/branches",
-      "tool/protocol"
-    ],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
   },
   {
     "id": "tools/web-fetch",
@@ -89,6 +50,7 @@
       "src/tools/web_search.rs",
       "tools/web_search/main.rs",
       "tools/web_search/tool.toml",
+      "tools/web_search/web_search.json",
       "tests/tools/web_search.rs",
       "docs/api.md"
     ],
@@ -98,6 +60,6 @@
       "site/helper-client",
       "tool/protocol"
     ],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
   }
 ]

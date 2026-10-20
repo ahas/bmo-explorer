@@ -1,16 +1,14 @@
-//! The web tools a tool host serves, the browse and remote-browser runs, and the unit command that starts them
-//! (docs/api.md).
+//! Web reading as an upstream (docs/api.md): the client of the six operations and the MCP server over it, the
+//! web tools a tool host places, the shared web helper and the site contract.
 
-pub mod browse;
-pub mod clients;
+pub mod client;
 pub mod forms;
-pub mod remote_browser;
-pub mod settings;
+pub mod mcp;
+pub mod openapi;
 pub mod site;
 pub mod store;
 pub mod tool;
 pub mod tools;
-pub mod unread;
 pub mod web;
 pub mod web_helper;
 

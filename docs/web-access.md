@@ -12,21 +12,24 @@
 - **The one standing store: each search engine's own jar.** A search engine keeps one cookie jar
   across investigations, in this repository's store (docs/store.md).
   - It holds only what that engine's own result pages and its warm-up page set, on the engine's
-    own hosts. A search request carries a query and nothing of any room.
+    own hosts. A search request carries a query and nothing of whoever asked it.
   - A cookie is kept for its own lifetime and never longer than 7 days.
   - The jar is emptied whenever the engine changes identity (「Identities and headers」).
-- **Scope of everything else:** one session record of the tool host is one investigation. The web
-  helper the host starts for a record holds its one reading, for the core tools and every site tool
-  alike (the tool host's `docs/mcp-host.md`, 「What a record's tools keep」).
+- **Scope of everything else:** one investigation, which is one of two things.
+  - A session record of the tool host: the web helper the host starts for a record holds its one
+    reading, for the core tools and every site tool alike (the tool host's `docs/mcp-host.md`, 「What a
+    record's tools keep」).
+  - One run of the MCP server (docs/api.md, 「The MCP server」): its client holds one reading for as
+    long as the server runs.
 - **Two per-investigation cookie stores:** inside it, the direct HTTP client that reads pages and
-  the real Chrome each keep using their own cookie store, and both are discarded when the record
-  ends.
+  the real Chrome each keep using their own cookie store, and both are discarded when the
+  investigation ends.
 - **Nothing moves between the three:**
   - An engine jar is never used for a page fetch and never handed to Chrome, and a page's or
     Chrome's cookies never enter an engine jar.
   - Cookies and credentials are never moved between the page client and Chrome.
-  - Nothing of a page fetch is shared with another record's search, browse or job run.
-  - So logins and challenge cookies never leak into another room or the next investigation.
+  - Nothing of a page fetch is shared with another investigation.
+  - So logins and challenge cookies never leak into another investigation.
 
 ### Identities and headers
 
@@ -82,28 +85,26 @@
 - **One queue per host:** every direct request, every redirect of the direct client, and every top-level
   navigation of the real browser first takes a per-host global FIFO interval.
 - **One queue per engine:** every request to a search engine first takes that engine's interval — the
-  research run's engine gap, or the engine's recipe interval where that is longer.
+  record's engine gap, or the engine's recipe interval where that is longer.
 - **Shared between processes:** both queues live in this repository's store, so two runs at once never
   double the rate a host or an engine sees.
 - **No starting late:** if the waiting slot falls after the caller's deadline, the request is not
-  started, and a lack of time is returned. So pacing never secretly eats browse's wrap-up time.
+  started, and a lack of time is returned. So pacing never secretly eats a caller's wrap-up time.
 - **`429` and `Retry-After`:**
   - When a page answers with them, that host's global time is pushed back.
   - If that time does not come within the deadline, it is not retried at once with Chrome but left as a
     block.
 
-### Settings from the research run
+### Settings from the session record
 
-- **What the session receives:** a research run (search, browse and their branches) is issued a
-  session record holding the fetch strategy and the host and engine gaps, and the research deadline
-  if the run has one (the tool host's `docs/mcp-host.md`, 「The session record」).
+- **What a record may carry:** the fetch strategy, the host and engine gaps, and a research deadline
+  (the tool host's `docs/mcp-host.md`, 「The session record」). A record that names none of them is read
+  `direct-then-browser`, at the default gaps, with no deadline.
 - **After the deadline:** new searches and pages are refused, and requests before it use the deadline
-  as their own.
-- **Only browse and its branches have a deadline.** Search and its branches have none, so the web tools
-  never refuse them on time (docs/browse-runs.md).
-- **Unavailable search:** in every kind of run, two `SEARCH UNAVAILABLE` in a row in one session stop
-  further asking.
-- **Outside research runs** (a job's worker, the owner's session), the tools are used with no deadline.
+  as their own. A record with no deadline is never refused on time.
+- **Unavailable search:** two `SEARCH UNAVAILABLE` in a row in one record stop further asking.
+- **The MCP server takes no record:** it reads `direct-then-browser`, at the default gaps, with no
+  deadline; a harness bounds its own session.
 
 ## Direct collection and real Chrome
 
@@ -116,8 +117,7 @@
   ended on, and Chrome follows the redirects itself: a site that sent the direct client to its login
   page may serve a browser the page itself.
 - **A failure the fallback meets says so:** the error carries the mark that Chrome failed the page
-  after the direct read had, so its caller knows both roads were tried. A research run's web tools
-  record only those (docs/site-contract.md, 「A page the searcher could not read」).
+  after the direct read had, so its caller knows both roads were tried.
 
 ### How a fetched page is classified
 
@@ -310,8 +310,11 @@
 - **The roster is one list of engines.** A category's roster is the engines that declare that
   category. Adding an engine is writing its module and putting it in the list; nothing else
   anywhere is told about it.
-- **The engines' states and cooldowns are read by other units** only through `explorer/search_engines`
-  (docs/api.md, 「The explorer entries」); the roster and the rests are built in beside the engines' code.
+- **The engines' states and cooldowns are this repository's own,** kept in its store and read by anyone
+  else only through `explorer_search_engines` and the client function behind it, or the tool host's
+  `explorer/search_engines` (docs/api.md); the roster and the rests are built in beside the engines' code.
+- **A search may name its engines:** each by its roster name, or a category standing for every engine of
+  it. A search naming none asks the general engines.
 
 ### Rosters
 

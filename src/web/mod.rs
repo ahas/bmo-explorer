@@ -11,7 +11,6 @@ pub mod client;
 pub mod clock;
 pub mod error;
 pub mod identity;
-pub mod import;
 pub mod jar;
 pub mod pacing;
 pub mod pdf;

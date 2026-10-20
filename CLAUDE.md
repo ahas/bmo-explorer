@@ -12,9 +12,9 @@ dependency direction owns it and the ones above read it through that service's A
 only what it uses itself, since the same thing kept in several places is the wrong structure (archive document
 #301, 「원칙」).
 
-This repository is `bmo-explorer`: the web tools a tool host serves, the shared web helper, the site contract,
-the browse and remote-browser runs, and the unit command `bmo-explorer`. `docs/api.md` is everything it serves
-and everything it calls.
+This repository is `bmo-explorer`: the client of its six web operations, the MCP server `bmo-explorer mcp` and
+its `bmo-explorer` skill, the web tools a tool host places, the shared web helper and the site contract.
+`docs/api.md` is everything it serves; it calls no other service.
 
 ## Rules
 
@@ -53,5 +53,6 @@ A change moves through three stages in order:
    the placed-site test under `tests/site-placed/`, which runs where `BMO_LIVE_TOOL_HOST` names an installed
    `mcp-host`.
 
-The version is the workspace's, in semver, kept in `VERSION`. `testbed.toml` is the testbed's declaration: how
+The version is the workspace's, `0.1.0-rev.<n>` until the first release, kept in `VERSION`; `docs/openapi.json` is
+written by `cargo run -- openapi`. `testbed.toml` is the testbed's declaration: how
 it tests, checks, builds and deploys the repository.

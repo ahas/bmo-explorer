@@ -56,18 +56,10 @@ CREATE TABLE IF NOT EXISTS web_host_pacing (
   next_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS page_read_failures (
-  id INTEGER PRIMARY KEY,
-  site TEXT NOT NULL,
-  url TEXT,
-  shape TEXT NOT NULL,
-  detail TEXT NOT NULL,
-  via TEXT NOT NULL,
-  run TEXT,
-  recorded_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS page_read_failures_by_site ON page_read_failures (site, recorded_at);
 ";
+
+/// The tables `TABLES` makes; a table of the file that is not one of them is dropped as the store opens.
+const KEPT: &[&str] = &["web_engine_cookie", "web_engine_health", "web_engine_recipe", "web_host_pacing"];
 
 /// The store's file under a data root.
 pub fn place(data_root: &Path) -> PathBuf {
@@ -93,5 +85,19 @@ pub async fn open(place: &Path) -> Result<SqliteConnection, String> {
     .execute(TABLES)
     .await
     .map_err(|why| format!("the store's tables could not be made: {why}"))?;
+
+  let standing: Vec<String> =
+    sqlx::query_scalar("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+      .fetch_all(&mut connection)
+      .await
+      .map_err(|why| format!("the store's tables could not be listed: {why}"))?;
+
+  for table in standing.iter().filter(|table| !KEPT.contains(&table.as_str())) {
+    connection
+      .execute(format!("DROP TABLE IF EXISTS \"{}\"", table.replace('"', "\"\"")).as_str())
+      .await
+      .map_err(|why| format!("the store's table {table} could not be dropped: {why}"))?;
+  }
+
   Ok(connection)
 }

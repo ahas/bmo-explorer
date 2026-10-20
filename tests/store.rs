@@ -27,17 +27,40 @@ async fn the_store_is_made_in_its_folder_of_the_data_root_with_every_table() {
 
   assert_eq!(
     tables,
-    [
-      "page_read_failures",
-      "web_engine_cookie",
-      "web_engine_health",
-      "web_engine_recipe",
-      "web_host_pacing"
-    ]
+    ["web_engine_cookie", "web_engine_health", "web_engine_recipe", "web_host_pacing"]
   );
-  // A store that stands already opens as it is.
+
+  // A store that stands already opens with what it keeps, and a table it does not keep is dropped.
+  sqlx::query("CREATE TABLE left_behind (id INTEGER PRIMARY KEY)")
+    .execute(&mut connection)
+    .await
+    .unwrap();
+  sqlx::query("INSERT INTO web_host_pacing (key, next_at, updated_at) VALUES ('example.org', 1, 1)")
+    .execute(&mut connection)
+    .await
+    .unwrap();
   drop(connection);
-  store::open(&place).await.unwrap();
+
+  let mut connection = store::open(&place).await.unwrap();
+  let tables: Vec<String> =
+    sqlx::query("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+      .fetch_all(&mut connection)
+      .await
+      .unwrap()
+      .iter()
+      .map(|row| row.get("name"))
+      .collect();
+  let paced: i64 = sqlx::query("SELECT COUNT(*) AS count FROM web_host_pacing")
+    .fetch_one(&mut connection)
+    .await
+    .unwrap()
+    .get("count");
+
+  assert_eq!(
+    tables,
+    ["web_engine_cookie", "web_engine_health", "web_engine_recipe", "web_host_pacing"]
+  );
+  assert_eq!(paced, 1);
 }
 
 #[tokio::test]

@@ -1,5 +1,5 @@
-//! The site contract's tests (docs/site-contract.md): the readings site tools share, and a page no road read as
-//! it is recorded.
+//! The site contract's tests (docs/site-contract.md): the readings site tools share, and the sites an address
+//! or a tool's site line names.
 
 mod site {
   mod readers_market;
@@ -8,5 +8,5 @@ mod site {
   mod readers_ordered;
   mod readers_plain;
   mod readers_script;
-  mod unread;
+  mod sites;
 }
