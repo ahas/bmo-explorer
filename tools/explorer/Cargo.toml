@@ -4,6 +4,7 @@ description = "The explorer entries' executable: what a caller of the tool host 
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [[bin]]
 name = "explorer-tool"

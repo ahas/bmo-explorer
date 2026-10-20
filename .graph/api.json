@@ -19,7 +19,7 @@
     "needs": [
       "unit/client"
     ],
-    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "base": "3c59c0214df651fe70d9981c88a8b419a930a828",
     "changed": 1792498032456,
     "boundary": {
       "side": "exposes"
@@ -43,7 +43,7 @@
       "unit/mcp",
       "unit/openapi"
     ],
-    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "base": "3c59c0214df651fe70d9981c88a8b419a930a828",
     "changed": 1792498032479,
     "boundary": {
       "side": "exposes"
@@ -73,7 +73,7 @@
       "helper/web-helper",
       "site/contract"
     ],
-    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "base": "3c59c0214df651fe70d9981c88a8b419a930a828",
     "changed": 1792498032449,
     "boundary": {
       "side": "exposes"
@@ -99,7 +99,7 @@
       "unit/mcp",
       "unit/client"
     ],
-    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "base": "3c59c0214df651fe70d9981c88a8b419a930a828",
     "changed": 1792498032464,
     "boundary": {
       "side": "exposes"
@@ -128,7 +128,7 @@
       "site/helper-client",
       "helper/web-helper"
     ],
-    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "base": "3c59c0214df651fe70d9981c88a8b419a930a828",
     "changed": 1792498032487,
     "boundary": {
       "side": "exposes"
@@ -153,7 +153,7 @@
       "helper/web-helper",
       "tool/protocol"
     ],
-    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "base": "3c59c0214df651fe70d9981c88a8b419a930a828",
     "changed": 1792498032471,
     "boundary": {
       "side": "exposes"

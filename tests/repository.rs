@@ -536,7 +536,6 @@ fn the_readme_names_every_top_level_folder_and_no_other() {
   let standing: BTreeSet<String> = tracked_files()
     .into_iter()
     .filter_map(|path| path.split_once('/').map(|(folder, _)| folder.to_owned()))
-    .filter(|folder| !folder.starts_with('.'))
     .collect();
   let named = readme_folders(&text_of("README.md").expect("README.md is at the root"));
 

@@ -14,6 +14,7 @@ resolver = "3"
 version = "0.1.0-rev.2"
 edition = "2024"
 publish = false
+license = "MIT"
 
 [workspace.dependencies]
 avif-parse = "2.1.0"
@@ -66,6 +67,7 @@ description = "Web reading as an upstream: its client, its MCP server, the web t
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 # An AVIF picture read into pixels: its container, its AV1 frames and their YUV turned into RGB.
