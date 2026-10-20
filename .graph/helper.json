@@ -17,13 +17,18 @@
       "docs/site-contract.md",
       "docs/web-access.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "WebRun",
+      "ResearchGuard",
+      "Research"
+    ],
     "aliases": [],
     "needs": [
       "web/session",
       "web/search-engines",
       "site/helper-client"
     ],
-    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032313
   }
 ]

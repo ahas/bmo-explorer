@@ -8,9 +8,14 @@
       "tests/store.rs",
       "docs/store.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "FOLDER",
+      "FILE",
+      "place"
+    ],
     "aliases": [],
     "needs": [],
-    "base": "3b02631f2d68fcc18384bfc3f82c313a37eabd9e"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032340
   }
 ]

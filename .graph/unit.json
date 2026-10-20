@@ -8,7 +8,15 @@
       "tests/client.rs",
       "docs/api.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "Explorer",
+      "ClientError",
+      "PageText",
+      "PageSource",
+      "Raster",
+      "RasterInput",
+      "SearchEnginesOutput"
+    ],
     "aliases": [],
     "needs": [
       "web/session",
@@ -18,7 +26,8 @@
       "web/pacing",
       "store/explorer-db"
     ],
-    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032373
   },
   {
     "id": "unit/command",
@@ -29,13 +38,16 @@
       "src/lib.rs",
       "docs/api.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "VERSION"
+    ],
     "aliases": [],
     "needs": [
       "unit/mcp",
       "unit/openapi"
     ],
-    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032379
   },
   {
     "id": "unit/mcp",
@@ -47,12 +59,18 @@
       "plugin/skills/bmo-explorer/SKILL.md",
       "docs/api.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "ExplorerServer",
+      "ExplorerTool",
+      "PLUGIN",
+      "MCP"
+    ],
     "aliases": [],
     "needs": [
       "unit/client"
     ],
-    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032385
   },
   {
     "id": "unit/openapi",
@@ -63,12 +81,16 @@
       "tests/openapi.rs",
       "docs/openapi.json"
     ],
-    "symbols": [],
+    "symbols": [
+      "openapi",
+      "openapi_json"
+    ],
     "aliases": [],
     "needs": [
       "unit/mcp",
       "unit/client"
     ],
-    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032391
   }
 ]

@@ -11,7 +11,6 @@ tools stand on. It serves no HTTP of its own and calls no other service.
 | Folder | Holds |
 |---|---|
 | `docs/` | the canonical documents: the boundary every other unit matches (`api.md`), the web reading (`web-access.md`), the site contract (`site-contract.md`) and the store (`store.md`); the contract itself, `openapi.json` |
-| `graph/` | the code dependency graph: one node per feature with its files and what it reads or calls, written only by `bmo graph` |
 | `plugin/` | the harness plugin's skill, `skills/bmo-explorer/` |
 | `src/` | the repository's one crate, `bmo-explorer`, split into its modules: the client, the MCP server and the contract document, the forms a web read takes, the web layer, the site contract, the tool host's call protocol, the web helper's reading and the store |
 | `tests/` | every test, the checks that span the repository among them, and under `tests/site-placed/` the placed site tools held against an installed tool host |

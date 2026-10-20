@@ -38,8 +38,8 @@ its `bmo-explorer` skill, the web tools a tool host places, the shared web helpe
 - **Documents state what is true now:** no change history, no quoted source and no file-and-line pins.
 - **A general format is read by a maintained library,** never by a parser written here; a reading no library
   gives says why beside its code.
-- **`graph/` is the code dependency graph**, written only by `bmo graph` run with `BMO_SOURCE_DIR` naming this
-  checkout; a change that moves a feature's files updates its node in the same commit.
+- **`.graph/` is the code dependency graph**, written only by `bmo-graph` run in this checkout; a change that
+  moves a feature's files updates its node in the same commit.
 
 ## Checks
 

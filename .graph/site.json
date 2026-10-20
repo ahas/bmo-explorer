@@ -11,7 +11,14 @@
       "tests/site-placed/site-placed.test.ts",
       "docs/site-contract.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "SiteTool",
+      "Reach",
+      "Rendered",
+      "PageHead",
+      "PageRequest",
+      "Slice"
+    ],
     "aliases": [],
     "needs": [
       "site/helper-client",
@@ -19,7 +26,8 @@
       "site/sites",
       "tool/protocol"
     ],
-    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032319
   },
   {
     "id": "site/helper-client",
@@ -29,13 +37,18 @@
       "src/site/helper.rs",
       "docs/site-contract.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "HELPER",
+      "WebAsked",
+      "HelperReach"
+    ],
     "aliases": [],
     "needs": [
       "tool/protocol",
       "web/forms"
     ],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032324
   },
   {
     "id": "site/readers",
@@ -61,10 +74,15 @@
       "tests/site/readers_script.rs",
       "docs/site-contract.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "units",
+      "fitted",
+      "cut_to"
+    ],
     "aliases": [],
     "needs": [],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032329
   },
   {
     "id": "site/sites",
@@ -75,9 +93,13 @@
       "tests/site/sites.rs",
       "docs/site-contract.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "site_of",
+      "sites_named_in"
+    ],
     "aliases": [],
     "needs": [],
-    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032334
   }
 ]

@@ -10,7 +10,14 @@
       "tests/tools/explorer.rs",
       "docs/api.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "Paced",
+      "PacedInput",
+      "FetchRaster",
+      "PageHeadOutput",
+      "FetchPage",
+      "SearchEngines"
+    ],
     "aliases": [],
     "needs": [
       "unit/client",
@@ -19,7 +26,8 @@
       "web/pictures",
       "tool/protocol"
     ],
-    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032356
   },
   {
     "id": "tools/web-fetch",
@@ -34,13 +42,17 @@
       "docs/web-access.md",
       "docs/site-contract.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "FetchInput",
+      "WebFetch"
+    ],
     "aliases": [],
     "needs": [
       "site/helper-client",
       "tool/protocol"
     ],
-    "base": "86500c1405ee23f6206f71a02e7c271a4c57b3e0"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032362
   },
   {
     "id": "tools/web-search",
@@ -54,12 +66,17 @@
       "tests/tools/web_search.rs",
       "docs/api.md"
     ],
-    "symbols": [],
+    "symbols": [
+      "SearchInput",
+      "WebSearch",
+      "Category"
+    ],
     "aliases": [],
     "needs": [
       "site/helper-client",
       "tool/protocol"
     ],
-    "base": "6c3fe165c39fbd0909fb623c7576740ba0343f32"
+    "base": "abc6e0fec2dccbfce53cdd1107d72b1919ae0722",
+    "changed": 1792498032368
   }
 ]
