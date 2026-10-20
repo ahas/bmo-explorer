@@ -1,0 +1,24 @@
+[
+  {
+    "id": "checks/repository",
+    "title": "Repository checks",
+    "what": "The tests that hold the repository to its rules: no personal data in a tracked file, no Korean past its ledger, the layout, and no other unit's code. They live under tests/ together with docs/PERSONAL-DATA.md, and testbed.toml declares how they run.",
+    "files": [
+      "tests/repository.rs",
+      "tests/personal_data.rs",
+      "docs/PERSONAL-DATA.md",
+      "testbed.toml",
+      "korean-ledger.json",
+      "Cargo.toml",
+      "rustfmt.toml"
+    ],
+    "symbols": [],
+    "aliases": [
+      "개인정보",
+      "personal data"
+    ],
+    "needs": [],
+    "base": "f8c47240eb358fe1c83caac839911b2508233067",
+    "changed": 1792532345972
+  }
+]

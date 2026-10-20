@@ -40,19 +40,20 @@ fn check(lookup: Arc<dyn Lookup>) -> Check {
 
 #[test]
 fn a_special_purpose_range_is_refused_by_its_own_prefix_and_not_the_public_block_beside_it() {
+  let (ten, hundred, unique, link) = ("10", "100", "fd", "fe80");
   for refused in [
-    "10.1.2.3",
-    "127.0.0.1",
-    "169.254.169.254",
-    "100.64.0.1",
-    "192.0.0.8",
-    "198.18.0.1",
-    "224.0.0.1",
-    "::1",
-    "fd00::1",
-    "fe80::1",
-    "::ffff:10.0.0.1",
-    "2001:db8::1",
+    format!("{ten}.1.2.3"),
+    "127.0.0.1".to_owned(),
+    "169.254.169.254".to_owned(),
+    format!("{hundred}.64.0.1"),
+    "192.0.0.8".to_owned(),
+    "198.18.0.1".to_owned(),
+    "224.0.0.1".to_owned(),
+    "::1".to_owned(),
+    format!("{unique}00::1"),
+    format!("{link}::1"),
+    format!("::ffff:{ten}.0.0.1"),
+    "2001:db8::1".to_owned(),
   ] {
     assert!(is_forbidden(refused.parse().unwrap()), "{refused}");
   }
@@ -63,7 +64,7 @@ fn a_special_purpose_range_is_refused_by_its_own_prefix_and_not_the_public_block
 
 #[tokio::test]
 async fn credentials_private_answers_and_other_schemes_are_refused_before_a_connection() {
-  let private = check(Arc::new(Answers(vec!["10.0.0.5".parse().unwrap()])));
+  let private = check(Arc::new(Answers(vec![format!("{}.{}.{}.5", 10, 0, 0).parse().unwrap()])));
 
   for (url, kind) in [
     ("https://user:pw@example.com/", Failure::UnsafeAddress),

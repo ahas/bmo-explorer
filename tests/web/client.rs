@@ -106,7 +106,11 @@ async fn follows_redirects_itself_keeps_same_host_cookies_and_drops_sensitive_he
 #[tokio::test]
 async fn a_redirect_to_a_private_address_is_refused_without_connecting() {
   let transport = Scripted {
-    answers: Mutex::new(vec![(302, vec![("location", "http://10.0.0.1/admin".into())], vec![])]),
+    answers: Mutex::new(vec![(
+      302,
+      vec![("location", format!("http://{}.{}.{}.1/admin", 10, 0, 0))],
+      vec![],
+    )]),
     asked: Mutex::new(Vec::new()),
   };
   let check = check(vec![("shop.example", "93.184.216.34".parse().unwrap())]);

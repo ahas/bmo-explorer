@@ -30,8 +30,10 @@ its `bmo-explorer` skill, the web tools a tool host places, the shared web helpe
   is an English sentence or a status code; a room's words are its agent's. Where code or a test inherently
   handles Korean text, the Korean is written plainly, never as an escape or a character code, and the file's
   count of lines holding it stands in `korean-ledger.json`.
-- **No agent names, owner names, machine names, home paths or private network addresses** in code, documents or
-  commits; tests use neutral names. `tests/repository.rs` reads the names from the list `BMO_NAMES_LIST` names,
+- **No personal data**, as `docs/PERSONAL-DATA.md` states it: no agent, owner or machine name, mail address, home
+  path, telephone number, token or private network address in code, documents or commits; tests use neutral
+  names. `tests/personal_data.rs` fails on each of those forms in any tracked file, naming the file, the line and
+  the kind but never the value. `tests/repository.rs` reads the names from the list `BMO_NAMES_LIST` names,
   since no repository keeps such a list.
 - **Tests live in `tests/`.** No test module sits in `src/` or beside a tool's code.
 - **No directory named after its parent** (no `x/x`), and **only the Cargo manifest at the root.**

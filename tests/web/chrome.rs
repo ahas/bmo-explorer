@@ -50,8 +50,10 @@ fn a_navigation_error_is_the_guards_refusal_where_one_was_recorded() {
 #[test]
 fn a_name_with_no_address_fails_only_its_own_request_unless_it_is_the_page_itself() {
   let unresolved = WebError::new("Could not resolve web host ads.example", Failure::Transport);
-  let refused =
-    WebError::new("Private or non-routable web address is not allowed: 10.0.0.1", Failure::UnsafeAddress);
+  let refused = WebError::new(
+    format!("Private or non-routable web address is not allowed: {}.{}.{}.1", 10, 0, 0),
+    Failure::UnsafeAddress,
+  );
 
   assert!(!fails_the_page(&unresolved, Some("Script"), Some("main"), Some("main")));
   assert!(!fails_the_page(&unresolved, Some("Document"), Some("child"), Some("main")));

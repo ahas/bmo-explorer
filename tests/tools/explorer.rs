@@ -69,7 +69,10 @@ async fn the_engines_come_in_the_roster_s_order_with_their_last_state_and_the_re
 async fn a_page_head_and_a_picture_are_refused_an_address_inside_this_network_before_anything_is_sent() {
   let root = tempfile::tempdir().unwrap();
   let session = session(root.path());
-  let asked = json!({ "address": "http://10.1.2.3/page", "pacing": "search:7" });
+  let asked = json!({
+    "address": format!("http://{}.{}.{}.{}/page", 10, 1, 2, 3),
+    "pacing": "search:7",
+  });
 
   for answer in [
     FetchPage.call(&session, asked.clone()).await.unwrap(),

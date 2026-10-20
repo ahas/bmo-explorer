@@ -5,7 +5,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::ErrorKind;
-use std::net::Ipv4Addr;
 use std::path::{Component, Path, PathBuf};
 use std::process::Command;
 
@@ -42,9 +41,6 @@ const HANGUL: [(u32, u32); 6] = [
 /// The variable naming the file of names no tracked file may hold: agents', people's and machines'. No
 /// repository keeps such a list, so it is read from outside the checkout.
 const NAMES_LIST: &str = "BMO_NAMES_LIST";
-
-/// Path prefixes a home directory is written under.
-const HOME_PREFIXES: [&str; 2] = ["/home/", "/Users/"];
 
 /// The manifests of another language that may not stand at the root beside the Cargo manifest.
 const OTHER_MANIFESTS: [&str; 5] = ["package.json", "pyproject.toml", "bun.lock", "go.mod", "deno.json"];
@@ -301,33 +297,6 @@ fn listed_names(text: &str, names: &toml::Table, from: &str) -> Vec<String> {
     .chain(exact_words.into_iter().filter(|name| holds_word(&text, name)))
     .chain(anywhere.into_iter().filter(|name| text.contains(name.as_str())))
     .collect()
-}
-
-/// An address in a range only a private network uses: the private ranges, and the shared range carrier-grade
-/// and overlay networks hand out.
-fn is_private_network(address: Ipv4Addr) -> bool {
-  let [first, second, ..] = address.octets();
-
-  address.is_private() || (first == 100 && second & 0b1100_0000 == 0b0100_0000)
-}
-
-fn private_addresses(text: &str) -> Vec<Ipv4Addr> {
-  text
-    .split(|letter: char| !letter.is_ascii_digit() && letter != '.')
-    .filter_map(|run| run.trim_matches('.').parse::<Ipv4Addr>().ok())
-    .filter(|&address| is_private_network(address))
-    .collect()
-}
-
-fn holds_home_path(text: &str) -> bool {
-  HOME_PREFIXES.iter().any(|prefix| {
-    text.match_indices(prefix).any(|(start, found)| {
-      text[start + found.len()..]
-        .chars()
-        .next()
-        .is_some_and(|next| is_word_character(next) || next == '.')
-    })
-  })
 }
 
 /// Whether a file is a test by its own name: a Bun or Node test file, or a Python one.
@@ -632,43 +601,4 @@ fn a_listed_name_is_found_as_a_word_in_its_case_and_anywhere() {
 
   assert_eq!(listed_names(text, &names, "a list"), ["example-host", "Agent", "neutral.example"]);
   assert!(listed_names("example-hosts and agent", &names, "a list").is_empty());
-}
-
-#[test]
-fn no_home_paths_in_tracked_files() {
-  let found: Vec<String> = tracked_texts()
-    .into_iter()
-    .filter(|(_, text)| holds_home_path(text))
-    .map(|(path, _)| path)
-    .collect();
-
-  assert!(found.is_empty(), "home paths in tracked files: {found:?}");
-}
-
-/// The tests of the address checks refuse private addresses by name, so the files under `tests/` are their input
-/// and are not held to this.
-#[test]
-fn no_private_network_addresses_outside_the_tests() {
-  let found: Vec<String> = tracked_texts()
-    .into_iter()
-    .filter(|(path, _)| !path.starts_with("tests/"))
-    .flat_map(|(path, text)| {
-      private_addresses(&text).into_iter().map(move |address| format!("{path}: {address}"))
-    })
-    .collect();
-
-  assert!(found.is_empty(), "private network addresses in tracked files: {found:?}");
-}
-
-#[test]
-fn a_home_path_and_a_private_address_are_found() {
-  // Made from the prefixes, since this file is itself held to the check.
-  assert!(holds_home_path(&format!("the profile under {}someone/.config", HOME_PREFIXES[0])));
-  assert!(holds_home_path(&format!("on a Mac at {}someone", HOME_PREFIXES[1])));
-  assert!(!holds_home_path("a page at https://example.com/home/ and /home/"));
-  assert_eq!(
-    private_addresses("10.1.2.3, 192.168.0.9, 100.64.0.1, 8.8.8.8 and 172.16.5.4."),
-    ["10.1.2.3", "192.168.0.9", "100.64.0.1", "172.16.5.4"]
-      .map(|address| address.parse::<Ipv4Addr>().unwrap())
-  );
 }

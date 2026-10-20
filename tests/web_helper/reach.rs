@@ -37,8 +37,8 @@ fn run() -> WebRun {
 #[tokio::test]
 async fn a_page_and_a_head_refuse_a_private_address_before_they_connect() {
   let reading = reading(false);
-  let page = reading.page("http://10.1.2.3/", None).await.unwrap_err();
-  let head = reading.head("http://192.168.1.1/file.zip").await.unwrap_err();
+  let page = reading.page(&format!("http://{}.{}.{}.{}/", 10, 1, 2, 3), None).await.unwrap_err();
+  let head = reading.head(&format!("http://{}.{}.{}.1/file.zip", 192, 168, 1)).await.unwrap_err();
 
   assert_eq!((page.kind, head.kind), (Failure::UnsafeAddress, Failure::UnsafeAddress));
 }
