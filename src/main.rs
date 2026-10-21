@@ -33,6 +33,18 @@ enum Verb {
   },
   /// Print the OpenAPI document, as docs/openapi.json holds it.
   Openapi,
+  /// Move the old archive's web-reading records from the item's export into the store (TODO #1923).
+  Import {
+    /// The export directory the item's export hand wrote.
+    #[arg(long)]
+    export: PathBuf,
+    /// The store's SQLite file; made and given its tables where it does not stand.
+    #[arg(long)]
+    database: PathBuf,
+    /// Read the export and report what would be written, writing nothing.
+    #[arg(long)]
+    dry_run: bool,
+  },
 }
 
 fn main() -> ExitCode {
@@ -50,6 +62,11 @@ fn main() -> ExitCode {
       print!("{}", openapi_json());
       Ok(())
     }
+    Verb::Import {
+      export,
+      database,
+      dry_run,
+    } => imported(export, database, dry_run),
   };
 
   match done {
@@ -59,6 +76,27 @@ fn main() -> ExitCode {
       ExitCode::from(1)
     }
   }
+}
+
+/// The old archive's web-reading records moved into the store: the report printed, and a failure where the
+/// count-and-sample compare found one.
+fn imported(export: PathBuf, database: PathBuf, dry_run: bool) -> Result<(), String> {
+  let runtime = tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()
+    .map_err(|why| format!("the runtime did not start: {why}"))?;
+
+  runtime.block_on(async move {
+    let report = bmo_explorer::import::run(&database, &export, dry_run).await?;
+    for line in report.lines() {
+      println!("{line}");
+    }
+    if report.sample.failures.is_empty() {
+      Ok(())
+    } else {
+      Err(format!("{} rows failed to compare", report.sample.failures.len()))
+    }
+  })
 }
 
 /// The MCP server, run until its harness closes standard input, its web reading ended after it.

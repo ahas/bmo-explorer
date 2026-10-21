@@ -3,6 +3,7 @@
 
 pub mod client;
 pub mod forms;
+pub mod import;
 pub mod mcp;
 pub mod openapi;
 pub mod site;
