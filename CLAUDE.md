@@ -41,7 +41,8 @@ its `bmo-explorer` skill, the web tools a tool host places, the shared web helpe
 - **A general format is read by a maintained library,** never by a parser written here; a reading no library
   gives says why beside its code.
 - **`.graph/` is the code dependency graph**, written only by `bmo-graph` run in this checkout; a change that
-  moves a feature's files updates its node in the same commit.
+  moves a feature's files updates its node in the checkout. Its area files are generated and untracked, so a
+  fresh checkout builds them again, while `settings.toml` is the repository's configuration and stays tracked.
 
 ## Checks
 
