@@ -53,6 +53,9 @@ root = "~/.local/share/bmo-explorer"
 link = "deploy"
 data_root = "~/.local/share/bmo/data"
 units = []
+# Answers 0 where no chat turn or research run stands under way that the restart would cut: the receiver's
+# own `quiet` command, by its deployed path, waited on before the flip (the testbed's docs/deploy.md).
+quiet = "~/.local/share/bmo-receiver/deploy/bin/bmo-receiver --config ~/.local/share/bmo-receiver/deploy/settings.toml quiet"
 
 # The unit command, linked into the folder holding `bmo`, the first folder `bmo` looks for unit commands in.
 # The link names this repository's deploy tree, whose own link stands across releases; a link made to the
