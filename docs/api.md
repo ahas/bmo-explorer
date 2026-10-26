@@ -108,6 +108,10 @@ repository's own (`testbed.toml`, its deploy steps). The host's call protocol is
 - **`web_search` and `web_fetch` name the helper `web`** among their shared helpers, and so does every site
   tool a site-tool repository places; the host starts one helper a record and hands its socket to every call
   naming it.
+- **`web_search` and `web_fetch` declare their line in the `web` listing** (the tool host's `docs/api.md`,
+  「The manifest」, `[entry.listing]`), so a searcher's instructions, composed with that listing, name the two
+  reading tools ahead of every site tool: `web_search` first and `web_fetch` second, each line headed with its
+  name and saying what it answers, and a site tool's lines after them in the order of the date it was made.
 - **No entry here declares a grant,** so a call of one is checked against the record's capabilities alone.
 
 ### What a placed tool reads of its record

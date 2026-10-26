@@ -20,3 +20,7 @@ description = "Fetches a URL with a browser-shaped direct session and returns th
 input = "web_fetch.json"
 hints = { read_only = true, open_world = true }
 capabilities = ["web.read"]
+
+[entry.listing]
+line = "- web_fetch — one page's own text, read by the site tool that claims its address where one does, a PDF as its text, a long page in slices"
+order = 2

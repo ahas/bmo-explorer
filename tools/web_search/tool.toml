@@ -19,3 +19,7 @@ description = "Searches the web by asking the search engines directly and return
 input = "web_search.json"
 hints = { read_only = true, open_world = true }
 capabilities = ["web.read"]
+
+[entry.listing]
+line = "- web_search — the search engines' own hits for a query, title, address and snippet each, nothing summarized; run several queries when one does not settle it"
+order = 1
