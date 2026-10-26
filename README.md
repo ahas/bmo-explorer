@@ -33,5 +33,5 @@ host's claims and calls to them.
 
 ## Version
 
-The workspace's version, in semver, is the repository's, kept in `VERSION` and the Cargo manifest: `0.1.0` and
-then one revision a version bump, `0.1.0-rev.<n>`, until the first release (docs/api.md, 「Versioning」).
+The workspace's version, in semver, is the repository's, kept in `VERSION` and the Cargo manifest. It moves only at a
+release the owner declares, and a commit or a deploy moves none (docs/api.md, 「Versioning」).

@@ -20,8 +20,9 @@ flowchart TD
 
 - **The repository has one version,** in `VERSION` and the Cargo manifest, which the MCP server's
   `serverInfo`, the OpenAPI document and the harness plugin all answer.
-- **It is numbered as bmo-chat's `docs/conventions.md` says (「Versions」):** before the first release
-  `0.1.0`, then `0.1.0-rev.<n>`, one revision a version bump, whatever the change.
+- **It is numbered and moved as bmo-chat's `docs/conventions.md` says (「Versions」):** only at a release the
+  owner declares — before the first release `0.1.0`, then `0.1.0-rev.<n>`, one revision a release — and a commit,
+  a deploy or a contract change moves none; a deployment is told apart by its commit.
 
 ## Settings and data
 
@@ -127,7 +128,7 @@ Of it the tools read:
   `explorer/fetch_raster`, `explorer/fetch_page` or `explorer/search_engines` that finds none is refused naming
   the variable, and the helper's start ends unclean naming it, which fails the call that started it.
 - **`labels.research`,** the research settings a record's web reading is held to (docs/web-access.md,
-  「Settings from the session record」), an object of four keys, each optional; any other key of it, and any
+  「Settings from the session record」), an object of six keys, each optional; any other key of it, and any
   other label, is the issuer's and left unread. One whose keys do not read as these types ends the helper's
   start unclean in the same way:
 
@@ -137,6 +138,8 @@ Of it the tools read:
 | `strategy` | `direct-then-browser`, `browser-first` or `direct-only` | How a page is read; `direct-then-browser` where absent |
 | `hostIntervalMs` | integer | The gap between two direct requests to one host |
 | `engineIntervalMs` | integer | The gap between two requests to one engine |
+| `pages` | integer, at least 1 | The record's page budget: how many pages its web tools read before every further page is refused |
+| `branchPages` | integer, at least 1 | The budget of each branch the run opens, which a branch's own record carries as its `pages`; read and kept, and no fetch of this record's is held to it |
 
 ### The explorer entries
 

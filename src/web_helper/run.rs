@@ -2,8 +2,9 @@
 //! the search refusals it has met, and its session — the direct client's jar, the pacing, the real Chrome it
 //! falls back to. A record holds one, in its web helper, which opens it as it starts and closes it as it ends.
 
-use std::sync::Arc;
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{Arc, Mutex};
 
 use serde::Deserialize;
 
@@ -17,6 +18,8 @@ use crate::web::{Failure, WebError, WebResult};
 pub const RESEARCH_CLOSED: &str = "RESEARCH CLOSED: this run's research time is over, so no new search or page is started. Write the result now from what you already have, citing only pages that were actually read, and say plainly what could not be confirmed.";
 
 pub const SEARCH_STOPPED: &str = "SEARCH UNAVAILABLE (not asked again in this run): the search engines refused twice in a row, so another query would meet the same refusal. Work from the pages already in hand and say plainly in the result that the search itself could not run.";
+
+pub const BUDGET_SPENT: &str = "BUDGET SPENT: this run has read every page its budget allows, so no further page is read. Write the result now from what you already have, citing only pages that were actually read, and put what stays open under UNCONFIRMED.";
 
 /// The issuer's label a record's research settings stand under.
 pub const RESEARCH_LABEL: &str = "research";
@@ -32,6 +35,12 @@ pub struct Research {
   pub strategy: Option<String>,
   pub host_interval_ms: Option<u64>,
   pub engine_interval_ms: Option<u64>,
+  /// How many pages the record's web tools read before every further page is refused; none where it names no
+  /// budget.
+  pub pages: Option<u32>,
+  /// The budget of each branch the run opens, which a branch's own record carries as its `pages`; kept, and no
+  /// fetch of this record's is held to it.
+  pub branch_pages: Option<u32>,
 }
 
 impl Research {
@@ -52,20 +61,60 @@ impl Research {
   }
 }
 
-/// The research close a run's tools are held to, and the search refusals met in a row.
+/// The research close a run's tools are held to, the search refusals met in a row, and the pages read against
+/// the record's budget.
 pub struct ResearchGuard {
   closes_at: Option<u64>,
   unavailable_in_a_row: AtomicU32,
   clock: Arc<dyn Clock>,
+  pages: Option<u32>,
+  read: Mutex<Read>,
+}
+
+/// The pages a record has read: the addresses `web_fetch` read, and how many pages in all.
+#[derive(Default)]
+struct Read {
+  addresses: HashSet<String>,
+  count: u32,
 }
 
 impl ResearchGuard {
   pub fn new(closes_at: Option<u64>, clock: Arc<dyn Clock>) -> Self {
+    Self::with_budget(closes_at, None, clock)
+  }
+
+  /// A guard holding the record's page budget as well, none where it names none.
+  pub fn with_budget(closes_at: Option<u64>, pages: Option<u32>, clock: Arc<dyn Clock>) -> Self {
     Self {
       closes_at,
       unavailable_in_a_row: AtomicU32::new(0),
       clock,
+      pages,
+      read: Mutex::new(Read::default()),
     }
+  }
+
+  /// One page taken out of the budget, or the refusal once it is spent. An address the record has read already is
+  /// that same page read on and takes nothing; a site tool's page names no address and is a page each call.
+  pub fn take_page(&self, address: Option<&str>) -> Option<&'static str> {
+    let pages = self.pages?;
+    let mut read = self.read.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+
+    if address.is_some_and(|address| read.addresses.contains(address)) {
+      return None;
+    }
+
+    if read.count >= pages {
+      return Some(BUDGET_SPENT);
+    }
+
+    read.count += 1;
+
+    if let Some(address) = address {
+      read.addresses.insert(address.to_owned());
+    }
+
+    None
   }
 
   /// The refusal a tool answers with once research has closed, or none while it is open.
@@ -108,7 +157,7 @@ impl WebRun {
     let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
     Ok(Self {
-      guard: ResearchGuard::new(research.closes_at, clock.clone()),
+      guard: ResearchGuard::with_budget(research.closes_at, research.pages, clock.clone()),
       session: Arc::new(WebSession::new(SessionParts {
         store: Arc::new(StorePacing::new(crate::store::place(&data_root))),
         transport: crate::web::client::network(),
@@ -126,7 +175,7 @@ impl WebRun {
   /// A reading over parts a test hands in.
   pub fn with(research: Research, session: WebSession, clock: Arc<dyn Clock>) -> Self {
     Self {
-      guard: ResearchGuard::new(research.closes_at, clock),
+      guard: ResearchGuard::with_budget(research.closes_at, research.pages, clock),
       session: Arc::new(session),
       research,
     }

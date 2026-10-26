@@ -103,6 +103,11 @@
 - **After the deadline:** new searches and pages are refused, and requests before it use the deadline
   as their own. A record with no deadline is never refused on time.
 - **Unavailable search:** two `SEARCH UNAVAILABLE` in a row in one record stop further asking.
+- **The page budget is a hard ceiling:** a record that names `pages` reads that many pages and refuses every
+  further one with one line, `BUDGET SPENT`, saying the budget is spent and to write from what is in hand. A page
+  is a `web_fetch` of an address the record has not read yet — reading on in one already read, by its offset,
+  is that same page — and a call of a site tool that reads no engine; a search, a picture and a page's head are
+  no pages. A record that names no budget is never refused on it.
 - **The MCP server takes no record:** it reads `direct-then-browser`, at the default gaps, with no
   deadline; a harness bounds its own session.
 

@@ -60,9 +60,12 @@ fn written(said: impl Serialize) -> Value {
 
 /// The guard's refusal of a site tool's call before it reads: research closed, and for a tool reading through
 /// the engines the engines' own refusals as well, the plain web search's included, so asking again through a
-/// tool meets the same wall.
+/// tool meets the same wall; for any other tool, the page budget spent, the call taking one page of it.
 fn opening(run: &WebRun, engine: bool) -> Option<&'static str> {
-  run.guard.closed().or_else(|| if engine { run.guard.search_stopped() } else { None })
+  run
+    .guard
+    .closed()
+    .or_else(|| if engine { run.guard.search_stopped() } else { run.guard.take_page(None) })
 }
 
 /// A site tool's outcome as the reading answers it: an engine tool's answer counted as a search, and a failure
@@ -111,7 +114,7 @@ async fn fetch(
   max_chars: Option<usize>,
   raw: bool,
 ) -> Answer {
-  if let Some(refused) = run.guard.closed() {
+  if let Some(refused) = run.guard.closed().or_else(|| run.guard.take_page(Some(url))) {
     return Answer::text(refused);
   }
 

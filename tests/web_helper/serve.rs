@@ -12,7 +12,7 @@ use bmo_explorer::web::{Failure, WebError};
 use bmo_explorer::web_helper::run::WebRun;
 use tokio::net::UnixListener;
 
-use bmo_explorer::web_helper::run::{RESEARCH_CLOSED, Research};
+use bmo_explorer::web_helper::run::{BUDGET_SPENT, RESEARCH_CLOSED, Research};
 use bmo_explorer::web_helper::serve::*;
 
 fn run(closes_at: Option<u64>) -> Arc<WebRun> {
@@ -161,4 +161,30 @@ fn what_a_tool_asks_reads_as_the_helper_reads_it() {
     serde_json::json!({ "kind": "search", "query": "q", "count": 10, "category": "news" })
   );
   assert_eq!(serde_json::from_value::<WebAsked>(written).unwrap(), asked);
+}
+
+// The page budget holds a site tool's call and a fetch alike (docs/web-access.md, 「Settings from the session
+// record」): a tool reading no engine takes a page as it opens, a fetch past the budget is refused before any site is
+// asked, and a tool reading through the engines takes none.
+#[tokio::test]
+async fn the_page_budget_holds_site_tools_and_fetches_alike() {
+  let (_dir, socket) = served(run_of(Research {
+    pages: Some(1),
+    ..Research::default()
+  }))
+  .await;
+  let fetch = WebAsked::Fetch {
+    url: "https://example.org/".into(),
+    offset: None,
+    max_chars: Some(100),
+    raw: false,
+  };
+
+  assert_eq!(reach(&socket).opening(false).await, Ok(None));
+  assert_eq!(reach(&socket).opening(true).await, Ok(None));
+  assert_eq!(reach(&socket).opening(false).await, Ok(Some(BUDGET_SPENT.to_owned())));
+
+  let spent: Answer = ask_line(&socket, &fetch).await.unwrap();
+
+  assert_eq!(spent.plain(), BUDGET_SPENT);
 }

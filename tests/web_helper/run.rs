@@ -57,6 +57,8 @@ fn what_a_run_is_held_to_is_read_off_its_record_s_label() {
       "strategy": "browser-first",
       "hostIntervalMs": 1_000,
       "engineIntervalMs": 2_000,
+      "pages": 8,
+      "branchPages": 4,
     },
     "owner": "search-run:7",
   }));
@@ -68,8 +70,31 @@ fn what_a_run_is_held_to_is_read_off_its_record_s_label() {
       strategy: Some("browser-first".into()),
       host_interval_ms: Some(1_000),
       engine_interval_ms: Some(2_000),
+      pages: Some(8),
+      branch_pages: Some(4),
     })
   );
   assert_eq!(Research::of(&record(serde_json::json!({}))), Ok(Research::default()));
   assert!(Research::of(&record(serde_json::json!({ "research": { "closesAt": "soon" } }))).is_err());
+}
+
+// The page budget is a hard ceiling (docs/web-access.md, 「Settings from the session record」): the pages it names are
+// read and every further one is refused, an address read already reading on for nothing, a site tool's page taking
+// one each call; a record naming no budget is never refused on it.
+#[test]
+fn the_page_budget_refuses_every_page_past_it() {
+  let guard = ResearchGuard::with_budget(None, Some(2), StandingClock::at(1_000));
+
+  assert_eq!(guard.take_page(Some("https://a.example/")), None);
+  assert_eq!(guard.take_page(Some("https://a.example/")), None);
+  assert_eq!(guard.take_page(None), None);
+  assert_eq!(guard.take_page(Some("https://b.example/")), Some(BUDGET_SPENT));
+  assert_eq!(guard.take_page(None), Some(BUDGET_SPENT));
+  assert_eq!(guard.take_page(Some("https://a.example/")), None);
+
+  let unbounded = ResearchGuard::new(None, StandingClock::at(1_000));
+
+  for page in 0..50 {
+    assert_eq!(unbounded.take_page(Some(&format!("https://c.example/{page}"))), None);
+  }
 }
