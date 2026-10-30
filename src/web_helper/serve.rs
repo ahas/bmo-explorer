@@ -19,6 +19,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{UnixListener, UnixStream};
 use tokio::signal::unix::{SignalKind, signal};
 
+use crate::web_helper::branch;
 use crate::web_helper::run::WebRun;
 
 /// What the reading answers to one request, as it is written on the answer's line.
@@ -37,6 +38,7 @@ pub async fn answer(run: &WebRun, asked: WebAsked) -> Value {
       raw,
     } => written(fetch(run, &url, offset, max_chars, raw).await),
     WebAsked::Picture { image } => written(picture(run, &image).await),
+    WebAsked::Branch { angle } => written(Answer::text(branch::open(run, &angle).await)),
     WebAsked::Page { url, request } => written(run.page(&url, request).await),
     WebAsked::Rendered {
       url,

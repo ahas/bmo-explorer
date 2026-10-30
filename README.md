@@ -4,7 +4,8 @@
 engines, a page read as words, a link's preview, a page's markup, the picture at an address and the engines'
 standing — the MCP server a harness starts as `bmo-explorer mcp` with its `bmo-explorer` skill, the web tools
 a tool host places, the shared web helper that keeps one investigation's reading, and the site contract site
-tools stand on. It serves no HTTP of its own and calls no other service.
+tools stand on. It serves no HTTP of its own, and the one service it calls is the session service a research
+record names, for a research branch.
 
 ## Layout
 
@@ -15,7 +16,7 @@ tools stand on. It serves no HTTP of its own and calls no other service.
 | `plugin/` | the harness plugin's skill, `skills/bmo-explorer/` |
 | `src/` | the repository's one crate, `bmo-explorer`, split into its modules: the client, the MCP server and the contract document, the forms a web read takes, the web layer, the site contract, the tool host's call protocol, the web helper's reading and the store |
 | `tests/` | every test, the checks that span the repository among them, and under `tests/site-placed/` the placed site tools held against an installed tool host |
-| `tools/` | the executables the tool host places, each with its manifest and schemas: `web_search`, `web_fetch`, `explorer`, and the shared web helper under `tools/_shared/web` |
+| `tools/` | the executables the tool host places, each with its manifest and schemas: `web_search`, `web_fetch`, `research`, `explorer`, and the shared web helper under `tools/_shared/web` |
 
 ## Build and test
 

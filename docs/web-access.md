@@ -97,9 +97,10 @@
 
 ### Settings from the session record
 
-- **What a record may carry:** the fetch strategy, the host and engine gaps, and a research deadline,
-  under its issuer's label `research` (docs/api.md, 「What a placed tool reads of its record」). A record
-  that names none of them is read `direct-then-browser`, at the default gaps, with no deadline.
+- **What a record may carry:** the fetch strategy, the host and engine gaps, a research deadline, a page
+  budget and a branch allowance, under its issuer's label `research` (docs/api.md, 「What a placed tool reads
+  of its record」). A record that names none of them is read `direct-then-browser`, at the default gaps, with no
+  deadline, no budget and no branch.
 - **After the deadline:** new searches and pages are refused, and requests before it use the deadline
   as their own. A record with no deadline is never refused on time.
 - **Unavailable search:** two `SEARCH UNAVAILABLE` in a row in one record stop further asking.
@@ -108,6 +109,12 @@
   is a `web_fetch` of an address the record has not read yet — reading on in one already read, by its offset,
   is that same page — and a call of a site tool that reads no engine; a search, a picture and a page's head are
   no pages. A record that names no budget is never refused on it.
+- **The branch allowance:** a record naming `branches`, its run's `run`, a deadline and the session service
+  it reaches by `sessionsAt` opens that many research branches through `web/research` and refuses every
+  further one, each branch a run of its own whose record carries `branchPages` as its `pages`; a branch's own
+  record, `branchOf`, opens none. After the deadline no branch opens, a branch still running is stopped two
+  minutes past it, and the reading's own close stops every branch still running (docs/api.md, 「The research
+  branch」).
 - **The MCP server takes no record:** it reads `direct-then-browser`, at the default gaps, with no
   deadline; a harness bounds its own session.
 

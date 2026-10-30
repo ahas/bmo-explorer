@@ -42,6 +42,7 @@ binaries = [
   "bmo-explorer",
   "web-search-tool",
   "web-fetch-tool",
+  "research-tool",
   "web-helper",
   "explorer-tool",
 ]
@@ -102,6 +103,17 @@ rm -rf tools/web_fetch/.placed
 mkdir -p tools/web_fetch/.placed
 cp bin/web-fetch-tool tools/web_fetch/tool.toml tools/web_fetch/*.json tools/web_fetch/.placed/
 bmo pocket put tools/web_fetch/.placed --placed --service bmo-explorer --allow web.read
+'''
+
+[[deploy.step]]
+id = "register-research"
+phase = "before-flip"
+command = '''
+set -eu
+rm -rf tools/research/.placed
+mkdir -p tools/research/.placed
+cp bin/research-tool tools/research/tool.toml tools/research/*.json tools/research/.placed/
+bmo pocket put tools/research/.placed --placed --service bmo-explorer --allow web.branches
 '''
 
 [[deploy.step]]

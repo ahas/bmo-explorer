@@ -1,8 +1,8 @@
-//! What a record's web tools ask its web helper (the tool host's docs/mcp-host.md, 「What a record's tools keep」): one JSON
-//! object on one line of the helper's socket, answered on one line. The core tools' requests are answered with
-//! the tool result, a placed site tool's roads with what the road gave or the failure it met, and the research
-//! guard round a site tool's call with its verdict. The tools ask through this client, and the helper,
-//! `tools/_shared/web/`, answers out of the record's one web reading.
+//! What a record's web tools ask its web helper (the tool host's docs/mcp-host.md, 「What a record's tools keep」):
+//! one JSON object on one line of the helper's socket, answered on one line. The core tools' requests, a
+//! research branch's among them, are answered with the tool result, a placed site tool's roads with what the
+//! road gave or the failure it met, and the research guard round a site tool's call with its verdict. The tools
+//! ask through this client, and the helper, `tools/_shared/web/`, answers out of the record's one web reading.
 
 use std::future::Future;
 use std::path::PathBuf;
@@ -45,6 +45,8 @@ pub enum WebAsked {
   },
   /// One picture by the address of its image file, answered as a picture.
   Picture { image: String },
+  /// One research branch over the angle, answered once it has ended with its notes, or with the refusal.
+  Branch { angle: String },
   /// A site tool's `page` road, answered with the road's result.
   Page {
     url: String,

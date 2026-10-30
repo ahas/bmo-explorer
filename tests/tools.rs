@@ -3,6 +3,7 @@
 
 mod tools {
   mod explorer;
+  mod research;
   mod web_fetch;
   mod web_search;
 }

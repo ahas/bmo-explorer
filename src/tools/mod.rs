@@ -2,5 +2,6 @@
 //! a tool; each tool's executable under `tools/` answers its entries out of its module.
 
 pub mod explorer;
+pub mod research;
 pub mod web_fetch;
 pub mod web_search;

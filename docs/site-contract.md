@@ -139,6 +139,7 @@
 | `search` | `query`, `count?`, `language?`, `category?` | the tool result of a web search |
 | `fetch` | `url`, `offset?`, `max_chars?`, `raw` (false where absent) | the tool result of a page read |
 | `picture` | `image`, the address of an image file | the tool result holding the picture |
+| `branch` | `angle`, the whole angle a research branch researches | the tool result of the branch: its framed notes once it has ended, or the refusal (docs/api.md, 「The research branch」) |
 | `page` | `url`, `request?`: `body?` and `headers`, a list of name and value pairs | the road's result: the body |
 | `rendered` | `url`, `fresh` (a browser of its own; false where absent), `arrival?` | the road's result: `url`, `status`, `html` and `text` |
 | `engine` | `query`, `count` | the road's result: the search's `hits`, `unresponsive`, `off_topic` and `health` |

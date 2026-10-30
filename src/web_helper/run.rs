@@ -1,6 +1,7 @@
 //! One record's web reading (docs/web-access.md, 「One session, one investigation」): its research close and
-//! the search refusals it has met, and its session — the direct client's jar, the pacing, the real Chrome it
-//! falls back to. A record holds one, in its web helper, which opens it as it starts and closes it as it ends.
+//! the search refusals it has met, its session — the direct client's jar, the pacing, the real Chrome it falls
+//! back to — and the research branches it has opened. A record holds one, in its web helper, which opens it as
+//! it starts and closes it as it ends.
 
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -14,6 +15,7 @@ use crate::web::clock::{Clock, SystemClock};
 use crate::web::pacing::StorePacing;
 use crate::web::session::{FetchPage, FetchSlice, SessionParts, WebSession};
 use crate::web::{Failure, WebError, WebResult};
+use crate::web_helper::branch::{BranchTimes, Branches};
 
 pub const RESEARCH_CLOSED: &str = "RESEARCH CLOSED: this run's research time is over, so no new search or page is started. Write the result now from what you already have, citing only pages that were actually read, and say plainly what could not be confirmed.";
 
@@ -24,8 +26,9 @@ pub const BUDGET_SPENT: &str = "BUDGET SPENT: this run has read every page its b
 /// The issuer's label a record's research settings stand under.
 pub const RESEARCH_LABEL: &str = "research";
 
-/// What a record's web tools are held to, as its issuer's label `research` says (docs/api.md, 「What a placed
-/// tool reads of its record」). Any other key of the label is the issuer's and left unread.
+/// What a record's web tools are held to, and the allowance its research branches are opened under, as its
+/// issuer's label `research` says (docs/api.md, 「What a placed tool reads of its record」). Any other key of
+/// the label is the issuer's and left unread.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Research {
@@ -38,9 +41,25 @@ pub struct Research {
   /// How many pages the record's web tools read before every further page is refused; none where it names no
   /// budget.
   pub pages: Option<u32>,
-  /// The budget of each branch the run opens, which a branch's own record carries as its `pages`; kept, and no
-  /// fetch of this record's is held to it.
+  /// The budget of each branch the run opens, which a branch's own record carries as its `pages`; no fetch of
+  /// this record's is held to it.
   pub branch_pages: Option<u32>,
+  /// How many research branches the run may open; none where it names none.
+  pub branches: Option<u32>,
+  /// The run's ledger id, which its branches' seats and names are kept under.
+  pub run: Option<i64>,
+  /// The run this record is itself a branch of, where it is one.
+  pub branch_of: Option<i64>,
+  /// The co-worker role a branch's seat is asked for.
+  pub role: Option<String>,
+  /// The line the run went out on, which labels its branches' seats and titles.
+  pub source: Option<String>,
+  /// The room the run answers, which a branch's run stands under.
+  pub chat: Option<i64>,
+  /// The base address of the session service a branch is carried through.
+  pub sessions_at: Option<String>,
+  /// The bearer token that service is asked with.
+  pub sessions_token: Option<String>,
 }
 
 impl Research {
@@ -127,6 +146,11 @@ impl ResearchGuard {
     self.closes_at
   }
 
+  /// Now, on the clock the close is read by.
+  pub fn now(&self) -> u64 {
+    self.clock.now()
+  }
+
   /// The answer a search gets without asking the engines, once they have refused twice in a row.
   pub fn search_stopped(&self) -> Option<&'static str> {
     (self.unavailable_in_a_row.load(Ordering::SeqCst) >= 2).then_some(SEARCH_STOPPED)
@@ -146,6 +170,7 @@ pub struct WebRun {
   pub research: Research,
   pub guard: ResearchGuard,
   pub session: Arc<WebSession>,
+  pub branches: Branches,
 }
 
 impl WebRun {
@@ -168,6 +193,7 @@ impl WebRun {
         host_interval_ms: research.host_interval_ms.unwrap_or(crate::web::client::DIRECT_HOST_INTERVAL_MS),
         browsers: None,
       })),
+      branches: Branches::new(BranchTimes::default()),
       research,
     })
   }
@@ -177,6 +203,7 @@ impl WebRun {
     Self {
       guard: ResearchGuard::with_budget(research.closes_at, research.pages, clock),
       session: Arc::new(session),
+      branches: Branches::new(BranchTimes::default()),
       research,
     }
   }
@@ -216,8 +243,9 @@ impl WebRun {
     }
   }
 
-  /// The run's browser and profile ended, as its record goes.
+  /// The run's branches still running ended, and its browser and profile, as its record goes.
   pub async fn close(&self) {
+    self.branches.end(&self.research).await;
     self.session.close().await;
   }
 }

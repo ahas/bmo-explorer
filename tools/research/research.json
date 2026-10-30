@@ -1,0 +1,13 @@
+{
+  "properties": {
+    "angle": {
+      "description": "The whole angle this branch researches, self-contained: what to find out and what a finished answer to\nit is.",
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "angle"
+  ],
+  "type": "object"
+}
