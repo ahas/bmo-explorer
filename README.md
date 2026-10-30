@@ -4,7 +4,7 @@
 engines, a page read as words, a link's preview, a page's markup, the picture at an address and the engines'
 standing — the MCP server a harness starts as `bmo-explorer mcp` with its `bmo-explorer` skill, the web tools
 a tool host places, the shared web helper that keeps one investigation's reading, and the site contract site
-tools stand on. It serves no HTTP of its own, and the one service it calls is the session service a research
+tools stand on. It serves no HTTP of its own, and the one service it calls is the research unit a research
 record names, for a research branch.
 
 ## Layout

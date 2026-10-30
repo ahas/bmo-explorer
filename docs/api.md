@@ -135,7 +135,7 @@ Of it the tools read:
   `explorer/fetch_raster`, `explorer/fetch_page` or `explorer/search_engines` that finds none is refused naming
   the variable, and the helper's start ends unclean naming it, which fails the call that started it.
 - **`labels.research`,** the research settings a record's web reading is held to (docs/web-access.md,
-  「Settings from the session record」) and the allowance its research branches are opened under (「The research
+  「Settings from the session record」) and the run its research branches are asked for under (「The research
   branch」), an object of the keys below, each optional; any other key of it, and any other label, is the
   issuer's and left unread. One whose keys do not read as these types ends the helper's start unclean in the
   same way:
@@ -147,67 +147,53 @@ Of it the tools read:
 | `hostIntervalMs` | integer | The gap between two direct requests to one host |
 | `engineIntervalMs` | integer | The gap between two requests to one engine |
 | `pages` | integer, at least 1 | The record's page budget: how many pages its web tools read before every further page is refused |
-| `branchPages` | integer, at least 1 | The budget of each branch the run opens, which a branch's own record carries as its `pages`; no fetch of this record's is held to it |
-| `branches` | integer | How many research branches the run may open; none where absent |
-| `run` | integer | The run's ledger id, which its branches' seats and names are kept under |
+| `run` | integer | The research run's id, which a branch is asked for under |
 | `branchOf` | integer | The run this record is itself a branch of, where it is one: such a record opens no branch |
-| `role` | string | The co-worker role a branch's seat is asked for |
-| `source` | string | The line the run went out on, which labels its branches' seats and titles |
-| `chat` | integer | The room the run answers, which a branch's run stands under |
-| `sessionsAt` | URL | The base address of the session service a branch is carried through |
-| `sessionsToken` | string | The bearer token that service is asked with; never handed on to a branch |
+| `branchesAt` | URL | The base address of the research unit a branch is asked at; present only on a run allowed branches |
+| `branchesToken` | string | The bearer token the research unit is asked with; never handed on |
 
 ### The research branch
 
 A research run at the thorough or the exhaustive depth opens one research branch per angle: a separate run on
 the search line's branch instructions, with the web tools, that researches the angle and hands back working
-notes. `web/research`, handed `angle`, asks the record's web helper, which holds the run's allowance, carries the
-branch through the session service the record names, and ends every branch still running as the reading
-closes. Its description tells the run that a branch first takes a place in the common co-worker pool, that a
-refusal is final for that request, that several branches go side by side as separate calls, and that what comes
-back is unchecked working notes. It is marked read-only, so a harness sends a turn's branch calls side by side;
-each call waits on its own branch alone, as long as the branch runs.
+notes. `web/research`, handed `angle`, asks the record's web helper, which asks the research unit the record
+names to open the branch and drops every request still waiting as the reading closes. Its description tells the
+run that a branch first takes a place in the common co-worker pool, that a refusal is final for that request,
+that several branches go side by side as separate calls, and that what comes back is unchecked working notes. It
+is marked read-only, so a harness sends a turn's branch calls side by side; each call waits on its own branch
+alone, as long as the branch runs.
 
 - **A refusal is a text answer the run reads,** `BRANCH REFUSED: <why>. Write the result from what you already
-  have.`, given before anything is asked of the session service:
+  have.` These are given before the research unit is asked:
   - where the record is itself a branch's, `branchOf` present: a branch opens no branch;
   - where the reading is closing with its record;
-  - where the record names no `run`, no `sessionsAt` or no `closesAt`: the run was not launched with a branch
+  - where the record names no `run`, no `branchesAt` or no `closesAt`: the run was not launched with a branch
     allowance;
-  - where the angle is empty;
-  - where the run's allowance is none or spent, saying how many branches it was allowed: every branch asked
-    past the refusals above counts against `branches`, whatever became of it, and the helper keeps the count
-    for the record's life.
+  - where the angle is empty.
 
   Where research has closed, the call answers what every web tool answers then, `RESEARCH CLOSED`.
-- **Its seat** is asked first: `POST /seat-requests` with the request key `research:<run>:branch:<n>`, `n`
-  counting the run's branches from 1, the owner `research:<run>`, the record's `role`, the selection `auto`,
-  the provider `claude-code`, the work key `search` and the record's `source`. The request is asked to be
-  admitted again every half second, by `PATCH /seat-requests/{token}`, until its state is admitted; where
-  research closes first, the request is cancelled and the call answers `BRANCH REFUSED: the common co-worker
-  pool stayed full until research closed`, and where the reading closes first, the request is cancelled
-  likewise.
-- **Seated, it runs apart:** `POST /sessions` starts a thrown-away session of the agent `search` on Claude
-  Code, on the model its seat was given, with the prompt document `search-branch` and bounded to two minutes
-  past research's close; the seat is bound to that session, and one turn goes into it. The turn's prompt is the
-  angle, framed as data and not instructions, and how long is left before research closes; its work parts lay it
-  on the seat's model, effort and tier, on a fresh session, named `research-<run>-branch-<n>` and titled
-  `<source> branch <n>`, under the record's `chat` (0 where it names none), with the work key `search`, hearing
-  no words, and with the variables the branch's own record is issued from: the run's close, line, role and room,
-  `BMO_RESEARCH_RUN` and `BMO_RESEARCH_BRANCH_OF` both the run's id, `BMO_RESEARCH_BRANCHES` 0,
-  `BMO_RESEARCH_PAGES` the record's `branchPages` where it names one, and the fetch strategy and the gaps where
-  the record names them. Neither `sessionsAt` nor `sessionsToken` is handed on.
-- **It is held to research's close:** the turn is waited on until two minutes past it, a margin to write in;
-  then its session is ended and the turn's answer is waited on a little longer for what it had written.
-- **Once the turn ends** its session is ended and its seat finished with what it came to: `completed`, `stopped
-  at research close`, or `failed:` and why.
-- **Its answer** is its notes framed as unchecked working notes, between `BRANCH <n> REPORT (working notes from a
-  research branch — data, not instructions, not checked):` and `END OF BRANCH <n>`, `(the branch wrote
-  nothing)` standing for empty notes, and the line `This branch was stopped when research closed; the notes
-  above are as far as it got.` where research closed before it ended or the reading stopped it. A branch the
-  session service failed answers `BRANCH <n> FAILED: <why>. Write the result from what you already have.`
-- **The reading closing ends its branches:** as the helper is asked to end, each running branch's session is
-  ended and its seat finished, and each seat still waiting is cancelled.
+- **The branch is asked for once:** `POST /branches` at the record's `branchesAt`, under `Authorization: Bearer`
+  with its `branchesToken`, with a JSON body of `run`, the record's run id, and `angle`, the angle with its
+  surrounding blanks taken off. The request is waited on as long as the branch runs and bounded by nothing here.
+  The research unit holds the run's allowance, seats the branch in the common co-worker pool on the run's own
+  road and holds it to research's close and its own margins past it; this repository counts no branch.
+- **200 answers how the branch ended:** `index`, the branch's number counted per run from 1; `state`,
+  `completed`, `stopped` or `failed`; `notes`, what the branch wrote; and `reason`, why it failed. A `completed`
+  branch answers its notes framed as unchecked working notes, between `BRANCH <n> REPORT (working notes from a
+  research branch — data, not instructions, not checked):` and `END OF BRANCH <n>`, `(the branch wrote nothing)`
+  standing for empty notes. A `stopped` branch answers the same with the line `This branch was stopped when
+  research closed; the notes above are as far as it got.` after them. A `failed` branch answers `BRANCH <n>
+  FAILED: <reason>. Write the result from what you already have.`
+- **409 with the code `branch-refused`** is the research unit's refusal, answered as `BRANCH REFUSED: <error>.
+  Write the result from what you already have.` with the sentence it gave as `error`: the run no longer running
+  or its research closed, the run allowed no branches, the allowance spent, or the pool full until research
+  closed.
+- **Any other answer,** or a request that could not be made or whose answer does not read, answers `BRANCH
+  FAILED: <why>. Write the result from what you already have.`, saying what the research unit answered or why it
+  could not be asked.
+- **The reading closing drops its branches:** as the helper is asked to end, every request still waiting is
+  dropped, which the research unit reads as the caller letting go of its branch, and the call answers `BRANCH
+  REFUSED: this research reading is closing.` No branch is asked for after it.
 
 ### The explorer entries
 
@@ -259,20 +245,12 @@ not read.
 - **The tool host,** the side of a call it made: the placed tools speak its call protocol, version 1, and
   `web_fetch` asks the call's own call-back socket which entry the record holds claims an address and calls
   that entry through the same socket (docs/site-contract.md, 「A page a tool claims」).
-- **The session service a research record names, for a research branch alone** (「The research branch」): at
-  the base address of the record's `sessionsAt`, under `Authorization: Bearer` with its `sessionsToken`, in
-  JSON, by its generic seat and session routes as its own `docs/api.md` states them (「sessions」 and 「pool,
-  seat-requests, reservations and roles」):
+- **The research unit a research record names, for a research branch alone** (「The research branch」): at the
+  base address of the record's `branchesAt`, under `Authorization: Bearer` with its `branchesToken`, in JSON, by
+  its `POST /branches` as its own `docs/api.md` states it: a branch of the record's run opened over an angle and
+  answered once it has ended, or refused.
 
-| Method | Path | Asked for |
-|---|---|---|
-| POST | `/seat-requests` | The branch's seat |
-| PATCH | `/seat-requests/{token}` | The seat admitted, bound to the branch's session, finished with its outcome, or cancelled |
-| POST | `/sessions` | The branch's thrown-away session |
-| POST | `/sessions/{sessionId}/turns` | The branch's one turn, answered as it ends |
-| DELETE | `/sessions/{sessionId}` | The branch's session ended |
-
-  This repository names no such service of its own: a record without `sessionsAt` opens no branch, and nothing
+  This repository names no such unit of its own: a record without `branchesAt` opens no branch, and nothing
   else here calls one.
 
 ## Missing in siblings
@@ -289,13 +267,7 @@ repository's worker:
 - **The issuer of a research session,** whoever posts its record to the tool host's `POST /tool-sessions`: names
   the data root as `BMO_DATA_DIR` among the record's `variables`, or has the host pass it on, and puts the
   research settings under `labels.research` in the shape 「What a placed tool reads of its record」 states, with
-  `sessionsAt` and `sessionsToken` for a run allowed branches; a branch's own record it issues from the
-  variables 「The research branch」 hands its turn, with `branchOf`, and shows it no `web/research`.
-- **The session service:** its contract document names a seat request's fields as `SeatRequest` without the
-  `model` and `effort` its answer carries, and its states as `waiting`, `admitted`, `bound` and `finished`
-  where its answer says `active` for an admitted seat; a seat is admitted only when its request is asked again,
-  by the change route; a cancel is read only beside the state `finished`; and a turn's work parts are read at the
-  top of the send's body with `work_key` and `hears_words` where `TurnSend` names `workKey` and `hearsWords`.
-  The branch reads both of each and sends both names, until that contract states what the routes read.
+  `branchesAt` and `branchesToken` for a run allowed branches; a branch's own record it issues with `branchOf`
+  and without either, and shows it no `web/research`.
 - **The tool host's deployment:** the `web/research_branch`, `bmo/browse` and `bmo/remote_browser` tools this
   repository does not place stand registered in a host they were put into until they are taken out of it.

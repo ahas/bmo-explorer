@@ -1,6 +1,6 @@
-# A research branch: one branch over an angle, opened and carried by the record's web helper through the session
-# service the record names (docs/api.md, 「The research branch」). Its call waits as long as the branch runs,
-# which the run's research close bounds. The repository's tools test holds the entry here to the tool answering it.
+# A research branch: one branch over an angle, asked of the research unit the record names by the record's web
+# helper (docs/api.md, 「The research branch」). Its call waits as long as the branch runs, which the research
+# unit holds to the run's research close. The repository's tools test holds the entry here to the tool answering it.
 
 [tool]
 name = "research"

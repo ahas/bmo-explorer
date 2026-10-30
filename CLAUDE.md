@@ -14,7 +14,7 @@ only what it uses itself, since the same thing kept in several places is the wro
 
 This repository is `bmo-explorer`: the client of its six web operations, the MCP server `bmo-explorer mcp` and
 its `bmo-explorer` skill, the web tools a tool host places, the shared web helper and the site contract.
-`docs/api.md` is everything it serves; the one service it calls is the session service a research record names,
+`docs/api.md` is everything it serves; the one service it calls is the research unit a research record names,
 for a research branch (`docs/api.md`, 「What this repository calls」).
 
 ## Rules

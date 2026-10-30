@@ -63,8 +63,8 @@ fn what_a_run_is_held_to_is_read_off_its_record_s_label() {
       "role": "researcher",
       "source": "search",
       "chat": -5,
-      "sessionsAt": "http://127.0.0.1:1/",
-      "sessionsToken": "a-token",
+      "branchesAt": "http://127.0.0.1:1/",
+      "branchesToken": "a-token",
       "owner": "search-run:7",
     },
     "owner": "search-run:7",
@@ -78,15 +78,10 @@ fn what_a_run_is_held_to_is_read_off_its_record_s_label() {
       host_interval_ms: Some(1_000),
       engine_interval_ms: Some(2_000),
       pages: Some(8),
-      branch_pages: Some(4),
-      branches: Some(4),
       run: Some(7),
       branch_of: None,
-      role: Some("researcher".into()),
-      source: Some("search".into()),
-      chat: Some(-5),
-      sessions_at: Some("http://127.0.0.1:1/".into()),
-      sessions_token: Some("a-token".into()),
+      branches_at: Some("http://127.0.0.1:1/".into()),
+      branches_token: Some("a-token".into()),
     })
   );
   assert_eq!(Research::of(&record(serde_json::json!({}))), Ok(Research::default()));

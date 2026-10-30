@@ -109,12 +109,11 @@
   is a `web_fetch` of an address the record has not read yet — reading on in one already read, by its offset,
   is that same page — and a call of a site tool that reads no engine; a search, a picture and a page's head are
   no pages. A record that names no budget is never refused on it.
-- **The branch allowance:** a record naming `branches`, its run's `run`, a deadline and the session service
-  it reaches by `sessionsAt` opens that many research branches through `web/research` and refuses every
-  further one, each branch a run of its own whose record carries `branchPages` as its `pages`; a branch's own
-  record, `branchOf`, opens none. After the deadline no branch opens, a branch still running is stopped two
-  minutes past it, and the reading's own close stops every branch still running (docs/api.md, 「The research
-  branch」).
+- **The branch allowance:** a record naming its run's `run`, a deadline and the research unit it reaches by
+  `branchesAt` asks that unit for one research branch each `web/research` call; how many branches the run may
+  open, each branch's own budget and how long past the deadline a branch may write are the research unit's to
+  hold. A branch's own record, `branchOf`, opens none. After the deadline no branch is asked for, and the
+  reading's own close drops every branch request still waiting (docs/api.md, 「The research branch」).
 - **The MCP server takes no record:** it reads `direct-then-browser`, at the default gaps, with no
   deadline; a harness bounds its own session.
 
