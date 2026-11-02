@@ -1,12 +1,12 @@
 //! The roads a site tool reaches its site by, as one record's web reading carries them (docs/site-contract.md,
 //! 「What a tool is given」): a page fetched as a browser asks for it, a page the real Chrome rendered, the
-//! search engines, a document read as `web_fetch` reads it, and a head request.
+//! search engines, a document read as `web_fetch` reads it, and a head request. Each waits for its answer;
+//! none has a timeout of its own.
 
 use std::future::Future;
 use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
 
 use reqwest::Method;
 use reqwest::redirect::Policy;
@@ -23,8 +23,6 @@ use url::Url;
 
 use crate::web_helper::run::WebRun;
 
-const PAGE_TIMEOUT: Duration = Duration::from_secs(20);
-
 fn plain_failure(why: impl std::fmt::Display) -> WebError {
   WebError::new(why.to_string(), Failure::Transport)
 }
@@ -32,7 +30,6 @@ fn plain_failure(why: impl std::fmt::Display) -> WebError {
 // A client for one hop, connecting to the address the hop's check passed rather than resolving the name again.
 fn hop_client(url: &Url, address: Option<std::net::IpAddr>) -> WebResult<reqwest::Client> {
   let mut builder = reqwest::Client::builder()
-    .timeout(PAGE_TIMEOUT)
     .redirect(Policy::none())
     .gzip(true)
     .brotli(true)
@@ -59,22 +56,18 @@ impl WebRun {
     headers: &[(String, String)],
   ) -> WebResult<reqwest::Response> {
     let check = self.session.check();
-    let deadline = self.guard.deadline().unwrap_or_else(|| {
-      crate::web::clock::now_ms() + u64::try_from(PAGE_TIMEOUT.as_millis()).unwrap_or(u64::MAX)
-    });
     let interval = self.research.host_interval_ms.unwrap_or(DIRECT_HOST_INTERVAL_MS);
     let mut current = web_url(url)?;
     let mut method = method;
     let mut body = body;
 
     for _ in 0..=MAX_REDIRECTS {
-      let target = check.resolve(&current, Some(deadline)).await?;
+      let target = check.resolve(&current).await?;
 
       wait_for_host(
         &**self.session.store(),
         &format!("page:{}", host_of(&current)),
         interval,
-        deadline,
         &*check.clock,
       )
       .await?;
@@ -162,13 +155,9 @@ impl Reach for WebRun {
         ));
       }
 
-      let deadline = self
-        .guard
-        .deadline()
-        .unwrap_or_else(|| crate::web::clock::now_ms() + crate::web::session::FETCH_TIMEOUT_MS);
       let arrived =
         arrival.map(|arrival| -> Arrived { Arc::new(move |at, title| arrival.arrived(at, title)) });
-      let page = self.session.render(url, deadline, fresh, FetchOptions { arrived }).await?;
+      let page = self.session.render(url, fresh, FetchOptions { arrived }).await?;
 
       Ok(Rendered {
         url: page.url,
@@ -219,7 +208,7 @@ impl Reach for WebRun {
 }
 
 impl WebRun {
-  /// One search through the run's roads: the shared store, its deadline and engine gap, and the real browser
+  /// One search through the run's roads: the shared store, its engine gap, and the real browser
   /// an engine's recipe may send it by — unless the run reads direct only.
   pub async fn search(
     &self,
@@ -236,7 +225,6 @@ impl WebRun {
         count,
         language,
         category,
-        deadline_ms: self.guard.deadline(),
         engine_interval_ms: self.research.engine_interval_ms,
         engines: &[],
       },

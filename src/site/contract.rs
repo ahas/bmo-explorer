@@ -96,7 +96,7 @@ impl Arrival {
 }
 
 /// What a site tool is given to reach its site with. A tool never opens a connection itself: the run that
-/// serves it brings the reading, so one place holds the pacing, the deadline and the policy every outward
+/// serves it brings the reading, so one place holds the pacing and the policy every outward
 /// request of this machine goes through.
 pub trait Reach: Send + Sync {
   /// One fixed public page or endpoint, fetched as a browser would; `request` posts a body to it, or asks for

@@ -19,14 +19,20 @@ impl Lookup for Answers {
   }
 }
 
-struct Never;
+// A resolver that answers once it is let to.
+struct Late(Arc<tokio::sync::Notify>);
 
-impl Lookup for Never {
+impl Lookup for Late {
   fn lookup<'a>(
     &'a self,
     _: &'a str,
   ) -> Pin<Box<dyn Future<Output = Result<Vec<IpAddr>, String>> + Send + 'a>> {
-    Box::pin(std::future::pending())
+    let answer = self.0.clone();
+
+    Box::pin(async move {
+      answer.notified().await;
+      Ok(vec!["93.184.216.34".parse().unwrap()])
+    })
   }
 }
 
@@ -72,22 +78,28 @@ async fn credentials_private_answers_and_other_schemes_are_refused_before_a_conn
     ("https://example.com/", Failure::UnsafeAddress),
     ("http://localhost:8080/", Failure::UnsafeAddress),
   ] {
-    assert_eq!(private.resolve(&Url::parse(url).unwrap(), None).await.unwrap_err().kind, kind, "{url}");
+    assert_eq!(private.resolve(&Url::parse(url).unwrap()).await.unwrap_err().kind, kind, "{url}");
   }
 
   let public = check(Arc::new(Answers(vec!["93.184.216.34".parse().unwrap()])));
-  let target = public.resolve(&Url::parse("https://example.com/a").unwrap(), None).await.unwrap();
+  let target = public.resolve(&Url::parse("https://example.com/a").unwrap()).await.unwrap();
 
   assert_eq!(target.address, Some("93.184.216.34".parse().unwrap()));
 }
 
 #[tokio::test]
-async fn a_lookup_past_the_deadline_is_the_deadline_and_sends_nothing() {
-  let slow = check(Arc::new(Never));
-  let failed = slow
-    .resolve(&Url::parse("https://slow.example/").unwrap(), Some(1_020))
-    .await
-    .unwrap_err();
+async fn a_slow_lookup_is_waited_for_until_the_resolver_answers() {
+  let answer = Arc::new(tokio::sync::Notify::new());
+  let slow = check(Arc::new(Late(answer.clone())));
+  let url = Url::parse("https://slow.example/").unwrap();
+  let mut resolving = Box::pin(slow.resolve(&url));
 
-  assert_eq!(failed.kind, Failure::Deadline);
+  // The clock moves on while the resolver is silent, and the lookup still waits.
+  for _ in 0..50 {
+    assert!(futures_util::poll!(resolving.as_mut()).is_pending());
+    tokio::task::yield_now().await;
+  }
+
+  answer.notify_one();
+  assert_eq!(resolving.await.unwrap().address, Some("93.184.216.34".parse().unwrap()));
 }

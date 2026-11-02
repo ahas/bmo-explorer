@@ -85,7 +85,7 @@ async fn follows_redirects_itself_keeps_same_host_cookies_and_drops_sensitive_he
   let check = check(vec![("shop.example", public), ("other.example", "93.184.216.35".parse().unwrap())]);
   let store = MemoryPacing::default();
   let jar = tokio::sync::Mutex::new(Jar::default());
-  let mut direct = Direct::new(&store, &jar, 2_000_000, &check, &transport);
+  let mut direct = Direct::new(&store, &jar, &check, &transport);
 
   direct.headers.push(("authorization".into(), "secret".into()));
 
@@ -116,7 +116,7 @@ async fn a_redirect_to_a_private_address_is_refused_without_connecting() {
   let check = check(vec![("shop.example", "93.184.216.34".parse().unwrap())]);
   let store = MemoryPacing::default();
   let jar = tokio::sync::Mutex::new(Jar::default());
-  let failed = Direct::new(&store, &jar, 2_000_000, &check, &transport)
+  let failed = Direct::new(&store, &jar, &check, &transport)
     .bytes("https://shop.example/")
     .await
     .unwrap_err();
@@ -134,7 +134,7 @@ async fn the_body_stops_at_the_cap_and_says_it_was_cut() {
   let check = check(vec![("shop.example", "93.184.216.34".parse().unwrap())]);
   let store = MemoryPacing::default();
   let jar = tokio::sync::Mutex::new(Jar::default());
-  let mut direct = Direct::new(&store, &jar, 2_000_000, &check, &transport);
+  let mut direct = Direct::new(&store, &jar, &check, &transport);
 
   direct.byte_cap = 10;
 

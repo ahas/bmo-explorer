@@ -1,5 +1,5 @@
 //! `web_search`, the web namespace's search (docs/web-access.md): the search engines asked directly, through
-//! the record's web helper, which holds the run's research close and the refusals it has met.
+//! the record's web helper, which holds the refusals the run has met.
 
 use crate::site::helper::{WebAsked, ask};
 use crate::tool::{Answer, Hints, NonEmpty, Served, Session, Tool};

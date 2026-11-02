@@ -1,41 +1,68 @@
 use std::collections::BTreeMap;
+use std::net::IpAddr;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use bmo_explorer::site::contract::{Arrival, Reach};
 use bmo_explorer::site::helper::{HelperReach, WebAsked};
 use bmo_explorer::tool::protocol::{Sockets, ask_line};
 use bmo_explorer::tool::{Answer, Session};
-use bmo_explorer::web::clock::StandingClock;
+use bmo_explorer::web::address::{Check, Lookup};
 use bmo_explorer::web::pacing::MemoryPacing;
 use bmo_explorer::web::session::{SessionParts, WebSession};
 use bmo_explorer::web::{Failure, WebError};
 use bmo_explorer::web_helper::run::WebRun;
 use tokio::net::UnixListener;
 
-use bmo_explorer::web_helper::run::{BUDGET_SPENT, RESEARCH_CLOSED, Research};
+use bmo_explorer::web_helper::run::{BUDGET_SPENT, Research, SEARCH_STOPPED};
 use bmo_explorer::web_helper::serve::*;
 
-fn run(closes_at: Option<u64>) -> Arc<WebRun> {
-  run_of(Research {
-    closes_at,
-    ..Research::default()
-  })
+fn run() -> Arc<WebRun> {
+  run_of(Research::default())
 }
 
 fn run_of(research: Research) -> Arc<WebRun> {
-  let clock = StandingClock::at(1_000);
+  run_checked(research, Check::default())
+}
 
+fn run_checked(research: Research, check: Check) -> Arc<WebRun> {
   Arc::new(WebRun::with(
     research,
     WebSession::new(SessionParts {
       store: Arc::new(MemoryPacing::default()),
       transport: bmo_explorer::web::client::network(),
-      check: bmo_explorer::web::address::Check::default(),
+      check,
       host_interval_ms: 0,
       browsers: None,
     }),
-    clock,
   ))
+}
+
+// A resolver that never answers, and says when the lookup it was asked for has been let go of.
+struct Silent(Arc<AtomicBool>);
+
+struct LetGo(Arc<AtomicBool>);
+
+impl Drop for LetGo {
+  fn drop(&mut self) {
+    self.0.store(true, Ordering::SeqCst);
+  }
+}
+
+impl Lookup for Silent {
+  fn lookup<'a>(
+    &'a self,
+    _: &'a str,
+  ) -> Pin<Box<dyn Future<Output = Result<Vec<IpAddr>, String>> + Send + 'a>> {
+    let let_go = LetGo(self.0.clone());
+
+    Box::pin(async move {
+      let _held = let_go;
+
+      std::future::pending().await
+    })
+  }
 }
 
 // A socket answering each connection out of the reading, as the helper serves it.
@@ -55,21 +82,65 @@ async fn served(run: Arc<WebRun>) -> (tempfile::TempDir, std::path::PathBuf) {
 
 #[tokio::test]
 async fn a_request_is_answered_on_its_line_out_of_the_record_s_reading() {
-  let (_dir, socket) = served(run(Some(500))).await;
+  let (_dir, socket) = served(run()).await;
   let fetch = WebAsked::Fetch {
-    url: "https://example.org/".into(),
+    url: "http://localhost/".into(),
     offset: None,
     max_chars: Some(100),
     raw: false,
   };
-  let closed: Answer = ask_line(&socket, &fetch).await.unwrap();
+  let refused: Answer = ask_line(&socket, &fetch).await.unwrap();
 
-  assert_eq!(closed.plain(), RESEARCH_CLOSED);
+  assert!(refused.is_error);
+  assert!(refused.plain().starts_with("ERROR: Private web address is not allowed: localhost"));
+}
+
+// A read is waited for until it ends, and an asker that ends its connection first lets go of it: the helper drops
+// the read with what it set off (docs/web-access.md, 「A read its caller lets go of」).
+#[tokio::test]
+async fn a_read_whose_asker_goes_away_is_dropped_with_what_it_set_off() {
+  let let_go = Arc::new(AtomicBool::new(false));
+  let check = Check {
+    lookup: Arc::new(Silent(let_go.clone())),
+    ..Check::default()
+  };
+  let (_dir, socket) = served(run_checked(Research::default(), check)).await;
+  let mut asking = tokio::net::UnixStream::connect(&socket).await.unwrap();
+  let fetch = WebAsked::Fetch {
+    url: "https://silent.example/".into(),
+    offset: None,
+    max_chars: None,
+    raw: false,
+  };
+
+  tokio::io::AsyncWriteExt::write_all(
+    &mut asking,
+    format!("{}\n", serde_json::to_string(&fetch).unwrap()).as_bytes(),
+  )
+  .await
+  .unwrap();
+
+  // The site's name is never answered: the read waits, held by nothing but its asker.
+  for _ in 0..20 {
+    tokio::task::yield_now().await;
+  }
+  assert!(!let_go.load(Ordering::SeqCst));
+
+  drop(asking);
+
+  // The test's own bound on how long it watches for the helper to let go.
+  tokio::time::timeout(std::time::Duration::from_secs(5), async {
+    while !let_go.load(Ordering::SeqCst) {
+      tokio::task::yield_now().await;
+    }
+  })
+  .await
+  .unwrap();
 }
 
 #[tokio::test]
 async fn a_line_that_does_not_read_is_answered_as_a_failure() {
-  let (_dir, socket) = served(run(None)).await;
+  let (_dir, socket) = served(run()).await;
   let answer: Answer = ask_line(&socket, &serde_json::json!({ "kind": "nothing" })).await.unwrap();
 
   assert!(answer.is_error);
@@ -88,20 +159,26 @@ fn reach(socket: &std::path::Path) -> HelperReach {
   HelperReach::of(&session)
 }
 
-// A site tool's call is held to the research close before it reads, and to the search refusals where it
-// reads through the engines (docs/site-contract.md, 「What a tool is given」).
+// A site tool's call is held to the search refusals where it reads through the engines (docs/site-contract.md,
+// 「What a tool is given」).
 #[tokio::test]
 async fn a_site_tool_s_call_is_refused_by_the_guard_the_helper_keeps() {
-  let (_closed_dir, closed) = served(run(Some(500))).await;
-  let (_open_dir, open) = served(run(None)).await;
+  let stopped = run();
+  let unavailable = "QUERY: q\nSEARCH UNAVAILABLE: engines refused or failed.";
 
-  assert_eq!(reach(&closed).opening(false).await, Ok(Some(RESEARCH_CLOSED.to_owned())));
+  stopped.guard.note_search(unavailable);
+  stopped.guard.note_search(unavailable);
+
+  let (_stopped_dir, stopped) = served(stopped).await;
+  let (_open_dir, open) = served(run()).await;
+
+  assert_eq!(reach(&stopped).opening(true).await, Ok(Some(SEARCH_STOPPED.to_owned())));
   assert_eq!(reach(&open).opening(true).await, Ok(None));
 }
 
 #[tokio::test]
 async fn a_site_tool_s_outcome_is_answered_as_the_reading_answers_it() {
-  let (_dir, socket) = served(run(None)).await;
+  let (_dir, socket) = served(run()).await;
   let reach = reach(&socket);
   let read = reach.ended(true, Ok("hits".into())).await;
   let failed = reach

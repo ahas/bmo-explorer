@@ -1,6 +1,7 @@
 # A research branch: one branch over an angle, asked of the research unit the record names by the record's web
-# helper (docs/api.md, 「The research branch」). Its call waits as long as the branch runs, which the research
-# unit holds to the run's research close. The repository's tools test holds the entry here to the tool answering it.
+# helper (docs/api.md, 「The research branch」). Its call waits as long as the branch runs, and the tool host ends
+# it only when it answers or its caller goes away. The repository's tools test holds the entry here to the tool
+# answering it.
 
 [tool]
 name = "research"
@@ -9,7 +10,6 @@ language = "rust"
 build = 'cargo build --release -p research-tool && cp "$BMO_CARGO_TARGET/release/research-tool" "$BMO_TOOL_OUT/"'
 check = 'cargo test --test tools'
 run = ["research-tool"]
-timeout = 3600
 shared = ["web"]
 
 [[entry]]

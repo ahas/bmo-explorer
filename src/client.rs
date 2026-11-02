@@ -32,9 +32,6 @@ use crate::web::{Failure, WebError};
 /// larger than this is not going to be previewed well anyway.
 pub const PAGE_HEAD_BYTES: usize = 512 * 1024;
 
-/// How long a page's head may take to come.
-pub const PAGE_HEAD_TIMEOUT_MS: u64 = 10_000;
-
 /// Between two requests for a page's head to one host.
 pub const PAGE_HEAD_HOST_INTERVAL_MS: u64 = 250;
 
@@ -73,7 +70,7 @@ impl From<WebError> for ClientError {
       Failure::UnsafeAddress => "unsafe-address",
       Failure::TooLarge => "too-large",
       Failure::BrowserUnavailable => "failed",
-      Failure::Blocked | Failure::Deadline | Failure::Transport | Failure::Http => "upstream-failed",
+      Failure::Blocked | Failure::Transport | Failure::Http => "upstream-failed",
     };
 
     Self::new(code, error.message)
@@ -282,7 +279,6 @@ impl Explorer {
         count: Some(count),
         language: asked.language.as_deref(),
         category: None,
-        deadline_ms: None,
         engine_interval_ms: None,
         engines: &engines,
       },
@@ -457,8 +453,8 @@ impl Explorer {
   }
 }
 
-/// A page's head and markup read directly: the address and each redirect checked, within ten seconds, at most
-/// 512 KiB of it, paced per host.
+/// A page's head and markup read directly: the address and each redirect checked, at most 512 KiB of it,
+/// paced per host.
 pub async fn page_head(
   url: &str,
   store: &dyn Pacing,
@@ -466,7 +462,7 @@ pub async fn page_head(
   transport: &dyn Transport,
 ) -> Result<DirectBytes, WebError> {
   let jar = tokio::sync::Mutex::new(Jar::default());
-  let mut direct = Direct::new(store, &jar, check.clock.now() + PAGE_HEAD_TIMEOUT_MS, check, transport);
+  let mut direct = Direct::new(store, &jar, check, transport);
 
   direct.interval_ms = PAGE_HEAD_HOST_INTERVAL_MS;
   direct.byte_cap = PAGE_HEAD_BYTES;

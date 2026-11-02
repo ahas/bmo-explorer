@@ -6,13 +6,15 @@
 //! An https request passes as a tunnel, so TLS and the certificate check stay between Chrome and the site.
 //! A plain http request is sent on a connection of its own, and the connection ends with its answer, so one
 //! connection never carries a second request to another name.
+//!
+//! Nothing here has a timeout: a connection is waited for until it opens or fails, and a request until Chrome
+//! has sent it whole or gone away.
 
 use std::convert::Infallible;
 use std::future::Future;
 use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::time::Duration;
 
 use bytes::Bytes;
 use http::{HeaderValue, Method, Request, Response, StatusCode, Uri};
@@ -28,9 +30,6 @@ use tokio::task::{JoinHandle, JoinSet};
 /// nothing), or a refusal.
 pub type Resolver =
   Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<Option<IpAddr>, String>> + Send>> + Send + Sync>;
-
-const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);
-const HEAD_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// A proxy standing for one Chrome; it stops when dropped.
 pub struct PinnedProxy {
@@ -64,15 +63,11 @@ fn refusal(status: StatusCode) -> Response<Body> {
 async fn open(resolve: &Resolver, url: String, host: &str, port: u16) -> Result<TcpStream, String> {
   let address = resolve(url).await?;
   let connecting = match address {
-    Some(address) => tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect((address, port))).await,
-    None => tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect((host, port))).await,
+    Some(address) => TcpStream::connect((address, port)).await,
+    None => TcpStream::connect((host, port)).await,
   };
 
-  match connecting {
-    Ok(Ok(stream)) => Ok(stream),
-    Ok(Err(why)) => Err(why.to_string()),
-    Err(_) => Err(format!("connect to {host}:{port} timed out")),
-  }
+  connecting.map_err(|why| why.to_string())
 }
 
 fn bare(host: &str) -> &str {
@@ -157,7 +152,8 @@ pub async fn start(resolve: Resolver) -> std::io::Result<PinnedProxy> {
         let service = service_fn(move |request| serve(request, resolve.clone()));
         let mut builder = hyper::server::conn::http1::Builder::new();
 
-        builder.header_read_timeout(HEAD_TIMEOUT).timer(hyper_util::rt::TokioTimer::new());
+        // hyper's own default would end a connection whose request head is slow to come.
+        builder.header_read_timeout(None);
 
         let _ = builder.serve_connection(TokioIo::new(client), service).with_upgrades().await;
       });

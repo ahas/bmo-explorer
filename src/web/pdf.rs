@@ -1,10 +1,10 @@
 //! A PDF's text, for the web reading that would otherwise hand an agent the file's raw bytes
 //! (docs/web-access.md, 「A PDF」). PDF is a general format and poppler's `pdftotext` is the maintained
 //! reader the machine already carries, so the document is handed to it; it runs as a process of its own,
-//! so a hostile file costs that process and not the host, and is killed at the fetch's deadline.
+//! so a hostile file costs that process and not the host. It is waited for until it ends, and ended with the
+//! read where the read's caller lets go of it.
 
 use std::process::Stdio;
-use std::time::Duration;
 
 use tokio::io::AsyncWriteExt;
 
@@ -54,15 +54,9 @@ pub fn paged_text(read: &str) -> String {
 pub use crate::forms::fetch::NO_PDF_TEXT;
 
 /// The PDF's text: `cut` says the body stopped at the transport's byte limit, which makes a file the reader
-/// cannot open this machine's limit rather than the site's fault, as is a reading that outruns the time the
-/// fetch has left. `layout` keeps each line of a page on one line with its columns spaced apart.
-pub async fn pdf_text(
-  bytes: &[u8],
-  url: &str,
-  timeout: Duration,
-  cut: bool,
-  layout: bool,
-) -> WebResult<String> {
+/// cannot open this machine's limit rather than the site's fault. `layout` keeps each line of a page on one
+/// line with its columns spaced apart.
+pub async fn pdf_text(bytes: &[u8], url: &str, cut: bool, layout: bool) -> WebResult<String> {
   let reader = std::env::var("BMO_PDFTOTEXT_PATH").unwrap_or_else(|_| "pdftotext".into());
   let mut command = tokio::process::Command::new(&reader);
 
@@ -90,29 +84,13 @@ pub async fn pdf_text(
   let feeding = tokio::spawn(async move {
     let _ = stdin.write_all(&handed).await;
   });
-  let finished =
-    tokio::time::timeout(timeout.max(Duration::from_millis(1)), child.wait_with_output()).await;
+  let finished = child.wait_with_output().await;
 
   feeding.abort();
 
-  let output = match finished {
-    Err(_) => {
-      return Err(
-        WebError::new(
-          format!("The PDF at {url} is too large to read inside the web deadline"),
-          Failure::TooLarge,
-        )
-        .with_url(url),
-      );
-    }
-    Ok(Err(why)) => {
-      return Err(
-        WebError::new(format!("The PDF at {url} could not be read: {why}"), Failure::Transport)
-          .with_url(url),
-      );
-    }
-    Ok(Ok(output)) => output,
-  };
+  let output = finished.map_err(|why| {
+    WebError::new(format!("The PDF at {url} could not be read: {why}"), Failure::Transport).with_url(url)
+  })?;
 
   if !output.status.success() {
     let complaint = String::from_utf8_lossy(&output.stderr);

@@ -15,7 +15,8 @@ use crate::web::session::{DEFAULT_FETCH_CHARS, MAX_FETCH_CHARS, render_slice};
 use base64::Engine;
 use serde::Serialize;
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::net::unix::OwnedReadHalf;
 use tokio::net::{UnixListener, UnixStream};
 use tokio::signal::unix::{SignalKind, signal};
 
@@ -60,18 +61,15 @@ fn written(said: impl Serialize) -> Value {
   })
 }
 
-/// The guard's refusal of a site tool's call before it reads: research closed, and for a tool reading through
-/// the engines the engines' own refusals as well, the plain web search's included, so asking again through a
-/// tool meets the same wall; for any other tool, the page budget spent, the call taking one page of it.
+/// The guard's refusal of a site tool's call before it reads: for a tool reading through the engines the
+/// engines' own refusals, the plain web search's included, so asking again through a tool meets the same wall;
+/// for any other tool, the page budget spent, the call taking one page of it.
 fn opening(run: &WebRun, engine: bool) -> Option<&'static str> {
-  run
-    .guard
-    .closed()
-    .or_else(|| if engine { run.guard.search_stopped() } else { run.guard.take_page(None) })
+  if engine { run.guard.search_stopped() } else { run.guard.take_page(None) }
 }
 
 /// A site tool's outcome as the reading answers it: an engine tool's answer counted as a search, and a failure
-/// answered as a failed page is, the research close said as such.
+/// answered as a failed page is.
 fn ended(run: &WebRun, engine: bool, outcome: crate::web::WebResult<String>) -> Answer {
   match outcome {
     Ok(text) => {
@@ -81,7 +79,7 @@ fn ended(run: &WebRun, engine: bool, outcome: crate::web::WebResult<String>) -> 
 
       Answer::text(text)
     }
-    Err(error) => run.closed_or(&error),
+    Err(error) => run.failed(&error),
   }
 }
 
@@ -92,7 +90,7 @@ async fn search(
   language: Option<&str>,
   category: Option<&str>,
 ) -> Answer {
-  if let Some(refused) = run.guard.closed().or_else(|| run.guard.search_stopped()) {
+  if let Some(refused) = run.guard.search_stopped() {
     return Answer::text(refused);
   }
 
@@ -105,7 +103,7 @@ async fn search(
       run.guard.note_search(&text);
       Answer::text(text)
     }
-    Err(error) => run.closed_or(&error),
+    Err(error) => run.failed(&error),
   }
 }
 
@@ -116,7 +114,7 @@ async fn fetch(
   max_chars: Option<usize>,
   raw: bool,
 ) -> Answer {
-  if let Some(refused) = run.guard.closed().or_else(|| run.guard.take_page(Some(url))) {
+  if let Some(refused) = run.guard.take_page(Some(url)) {
     return Answer::text(refused);
   }
 
@@ -124,15 +122,11 @@ async fn fetch(
 
   match run.read_page(url, offset, Some(max_chars), raw, false).await {
     Ok(slice) => Answer::text(render_slice(&slice)),
-    Err(error) => run.closed_or(&error),
+    Err(error) => run.failed(&error),
   }
 }
 
 async fn picture(run: &WebRun, address: &str) -> Answer {
-  if let Some(refused) = run.guard.closed() {
-    return Answer::text(refused);
-  }
-
   let viewed = async {
     let image =
       fetch_raster(address, &**run.session.store(), run.session.check(), &**run.session.transport())
@@ -166,7 +160,7 @@ async fn picture(run: &WebRun, address: &str) -> Answer {
         structured: None,
       }
     }
-    Err(error) => run.closed_or(&error),
+    Err(error) => run.failed(&error),
   }
 }
 
@@ -174,23 +168,35 @@ async fn picture(run: &WebRun, address: &str) -> Answer {
 const _: () = assert!(VIEWED_PICTURE_EDGE == 1568);
 
 /// One connection: one request read off its line, answered on one line; a line that does not read is
-/// answered as a failure.
+/// answered as a failure. The asker holds its side open until it is answered, and an asker that ends it first
+/// has let go of its request: the read under way for it is dropped with everything it set off.
 pub async fn one(run: Arc<WebRun>, stream: UnixStream) {
   let (reading, mut writing) = stream.into_split();
+  let mut reading = BufReader::new(reading);
   let mut line = String::new();
 
-  if BufReader::new(reading).read_line(&mut line).await.is_err() {
+  if reading.read_line(&mut line).await.is_err() {
     return;
   }
 
   let answer = match serde_json::from_str::<WebAsked>(&line) {
-    Ok(asked) => answer(&run, asked).await,
+    Ok(asked) => tokio::select! {
+      answered = answer(&run, asked) => answered,
+      () = let_go(&mut reading) => return,
+    },
     Err(why) => written(Answer::failure(format!("the web helper was asked what it does not read: {why}"))),
   };
   let mut said = answer.to_string();
 
   said.push('\n');
   let _ = writing.write_all(said.as_bytes()).await;
+}
+
+// Returns once the asker has ended its side of the connection; anything more it writes is not read as a request.
+async fn let_go(reading: &mut BufReader<OwnedReadHalf>) {
+  let mut rest = [0_u8; 256];
+
+  while matches!(reading.read(&mut rest).await, Ok(read) if read > 0) {}
 }
 
 /// The helper's whole life for the record: its reading opened, the socket bound and said on standard output,

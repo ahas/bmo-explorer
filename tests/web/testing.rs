@@ -158,7 +158,6 @@ impl BrowserFetcher for FakeBrowser {
   fn fetch(
     &self,
     url: String,
-    _: u64,
     options: FetchOptions,
   ) -> Pin<Box<dyn Future<Output = WebResult<BrowserDocument>> + Send + '_>> {
     self.calls.lock().unwrap().push((url, options.arrived.is_some()));

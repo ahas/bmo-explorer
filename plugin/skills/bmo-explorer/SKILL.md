@@ -54,7 +54,7 @@ A failure is a result marked `isError` whose text is `{"code": …, "error": …
 | `unsafe-address` | the address is inside a private network or otherwise refused before any request | do not retry; it is never fetched |
 | `not-markup` | `explorer_fetch_page` met a file that is not HTML | read it with `explorer_web_fetch` |
 | `too-large` | the answer is more than the tool reads | read a smaller resource |
-| `upstream-failed` | the site or the engines failed, refused or timed out; the sentence says which | try another source, or say it could not be read |
+| `upstream-failed` | the site or the engines failed or refused, or the connection broke; the sentence says which | try another source, or say it could not be read |
 | `failed` | this machine failed: its store or its Chrome | report it |
 
 An engine that refused rests for its cooldown; a search during the rest answers without it and lists it under

@@ -1,10 +1,7 @@
 use bmo_explorer::web::error::Failure;
 use bmo_explorer::web::pdf::*;
-use std::time::Duration;
 
 use crate::testing::pdf_of;
-
-const READ: Duration = Duration::from_secs(10);
 
 // Carried from packages/web/pdf-text.test.ts: knows a PDF by its type or, sent as anything else, by its signature
 #[test]
@@ -36,7 +33,6 @@ async fn each_pages_text_is_read_in_order() {
   let text = pdf_text(
     &pdf_of(&["MPS-35 Series", "Output Voltage: 1 to 5V"]),
     "https://maker.test/manual.pdf",
-    READ,
     false,
     false,
   )
@@ -50,9 +46,7 @@ async fn each_pages_text_is_read_in_order() {
 #[tokio::test]
 async fn a_pdf_with_no_text_layer_says_it_holds_pictures() {
   assert_eq!(
-    pdf_text(&pdf_of(&[""]), "https://maker.test/scan.pdf", READ, false, false)
-      .await
-      .unwrap(),
+    pdf_text(&pdf_of(&[""]), "https://maker.test/scan.pdf", false, false).await.unwrap(),
     NO_PDF_TEXT
   );
 }
@@ -63,17 +57,11 @@ async fn an_unreadable_file_is_the_sites_and_a_cut_one_this_machines_limit() {
   let broken = b"%PDF-1.4\nnot a document";
 
   assert_eq!(
-    pdf_text(broken, "https://maker.test/broken.pdf", READ, false, false)
-      .await
-      .unwrap_err()
-      .kind,
+    pdf_text(broken, "https://maker.test/broken.pdf", false, false).await.unwrap_err().kind,
     Failure::Transport
   );
   assert_eq!(
-    pdf_text(broken, "https://maker.test/cut.pdf", READ, true, false)
-      .await
-      .unwrap_err()
-      .kind,
+    pdf_text(broken, "https://maker.test/cut.pdf", true, false).await.unwrap_err().kind,
     Failure::TooLarge
   );
 }

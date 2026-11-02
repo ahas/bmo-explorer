@@ -70,7 +70,7 @@
     provider's addresses next to a protocol block — is read like any other site.
 - **The trusted road:** test fixtures use a separate trusted road only.
 - **Hostname resolution:**
-  - It must finish inside the same deadline and cancellation.
+  - It is waited for until the resolver answers, and a read its caller lets go of drops its lookup with it.
   - While it is slow, the real request is not sent ahead of it.
 - **Connecting to the checked address:**
   - The connection is made to exactly the address that passed the check; the request does not resolve
@@ -88,34 +88,47 @@
   record's engine gap, or the engine's recipe interval where that is longer.
 - **Shared between processes:** both queues live in this repository's store, so two runs at once never
   double the rate a host or an engine sees.
-- **No starting late:** if the waiting slot falls after the caller's deadline, the request is not
-  started, and a lack of time is returned. So pacing never secretly eats a caller's wrap-up time.
+- **A slot is waited for, however far off:** a request takes the next slot of its queue and starts when the
+  slot comes. No request is turned away for the wait in front of it.
 - **`429` and `Retry-After`:**
   - When a page answers with them, that host's global time is pushed back.
-  - If that time does not come within the deadline, it is not retried at once with Chrome but left as a
-    block.
+  - The read waits until that time and then asks Chrome, where its strategy lets it; the site's own span
+    is followed, never cut short and never copied into a bound of this layer's.
 
 ### Settings from the session record
 
-- **What a record may carry:** the fetch strategy, the host and engine gaps, a research deadline, a page
-  budget and a branch allowance, under its issuer's label `research` (docs/api.md, 「What a placed tool reads
-  of its record」). A record that names none of them is read `direct-then-browser`, at the default gaps, with no
-  deadline, no budget and no branch.
-- **After the deadline:** new searches and pages are refused, and requests before it use the deadline
-  as their own. A record with no deadline is never refused on time.
+- **What a record may carry:** the fetch strategy, the host and engine gaps, a page budget and a branch
+  allowance, under its issuer's label `research` (docs/api.md, 「What a placed tool reads of its record」). A
+  record that names none of them is read `direct-then-browser`, at the default gaps, with no budget and no
+  branch.
+- **Nothing a record carries is a clock:** no search, page or branch is refused or cut short because time has
+  passed. A read ends with its answer, its own failure, or its caller letting go of it (「A read its caller lets
+  go of」).
 - **Unavailable search:** two `SEARCH UNAVAILABLE` in a row in one record stop further asking.
 - **The page budget is a hard ceiling:** a record that names `pages` reads that many pages and refuses every
   further one with one line, `BUDGET SPENT`, saying the budget is spent and to write from what is in hand. A page
   is a `web_fetch` of an address the record has not read yet — reading on in one already read, by its offset,
   is that same page — and a call of a site tool that reads no engine; a search, a picture and a page's head are
   no pages. A record that names no budget is never refused on it.
-- **The branch allowance:** a record naming its run's `run`, a deadline and the research unit it reaches by
-  `branchesAt` asks that unit for one research branch each `web/research` call; how many branches the run may
-  open, each branch's own budget and how long past the deadline a branch may write are the research unit's to
-  hold. A branch's own record, `branchOf`, opens none. After the deadline no branch is asked for, and the
+- **The branch allowance:** a record naming its run's `run` and the research unit it reaches by `branchesAt`
+  asks that unit for one research branch each `web/research` call; how many branches the run may open and each
+  branch's own budget are the research unit's to hold. A branch's own record, `branchOf`, opens none. The
   reading's own close drops every branch request still waiting (docs/api.md, 「The research branch」).
-- **The MCP server takes no record:** it reads `direct-then-browser`, at the default gaps, with no
-  deadline; a harness bounds its own session.
+- **The MCP server takes no record:** it reads `direct-then-browser`, at the default gaps.
+
+### A read its caller lets go of
+
+- **A read waits for its answer.** No request of the web layer has a timeout of its own: a page, a search
+  engine, a picture, a page's head, a name's lookup, Chrome's load of a page and the PDF reader each end with
+  their answer, a refused or broken connection, or the other end gone. The connection's TCP keep-alive is what
+  tells a peer that has gone away.
+- **Its caller lets go of it by going away.** A call of a placed tool asks the record's web helper on a
+  connection of its own and holds it open until it is answered. When the call ends — it answered, the tool host
+  ended it, or its caller went away — that connection closes, and the helper drops the read with everything
+  under way for it: the request, its wait in a pacing queue or for a Chrome place, Chrome's navigation, the PDF
+  reader, a branch request. A harness that cancels a call of the MCP server drops that call's read the same way.
+- **A site that takes the connection and never answers holds the read until its caller lets go of it.** Nothing
+  here ends such a read on time.
 
 ## Direct collection and real Chrome
 
@@ -184,7 +197,8 @@
   - A PDF with no text layer — a scan, pages that are pictures — answers saying so, never with a
     blank text read as success.
   - A PDF the reader cannot open, a cut one among them, is an error naming the reader's complaint.
-    `pdftotext` runs as its own process under the fetch's deadline and is killed at it.
+    `pdftotext` runs as its own process and is waited for until it ends; a read its caller lets go of ends
+    the process with it.
 - **Only the direct client reads a PDF.** Chrome shows a PDF in its viewer, whose page holds no
   text. Under `browser-first`, a page Chrome reports as a PDF is read again by the direct client; a
   PDF served to Chrome alone, after the direct client was refused, is a block.
@@ -239,18 +253,18 @@
 - **A few Chromes on the machine at once.** A Chrome takes one of the machine's browser places before it
   starts and gives it back as it ends; there are three, and `BMO_CHROME_PLACES` sets another number. A
   place is a lock in the temporary directory, let go with the process holding it however that process
-  ends. A start that finds every place taken waits for one until its own deadline, then fails as
-  unavailable, saying every place was taken.
-- **A start has the caller's deadline and no bound of its own.** Its private display and Chrome are
-  waited for until the deadline of the read that asked for them. On a loaded machine a fresh display
-  and Chrome can stand silent for seconds before they answer, where an idle machine answers in about
-  half a second; a shorter bound of the start's own would fail a read that still had most of its
-  deadline left.
-- **An idle Chrome ends.** A Chrome nothing has used for three minutes is ended as at the end below and
-  gives its place back; the next page in that session starts a fresh one, with fresh cookies. A record
-  stands as long as its session — a resident program's for as long as the program stands — and a
+  ends. A start that finds every place taken waits for one to be given back, however long that takes, and
+  is never turned away for having waited; a place whose lock file cannot be opened at all fails the start
+  as unavailable.
+- **A start waits for what it started.** Its private display is waited for until the display names its
+  number or ends, and Chrome until its DevTools endpoint answers or Chrome exits. On a loaded machine a
+  fresh display and Chrome can stand silent for seconds before they answer, where an idle machine answers
+  in about half a second.
+- **An idle Chrome ends.** A Chrome no read has used or waited for in three minutes is ended as at the end
+  below and gives its place back; the next page in that session starts a fresh one, with fresh cookies. A
+  record stands as long as its session — a resident program's for as long as the program stands — and a
   session that read one page an hour ago would otherwise keep a place, and a browser's memory, for
-  hours.
+  hours. It is the release of a browser nothing is using; a read under way or waiting is never ended by it.
 - **A browser of its own, where a page asks for one:** a page opened through the render road may be
   asked for in a Chrome started for that page alone and ended as soon as it is read, under the same
   guard, pacing and cleanup. It is for a site that puts a check in front of the second page one browser
@@ -260,16 +274,25 @@
   road may be handed a test of the address it stands at and the document's title. While they fail it
   — a site's own browser check that runs its script and then moves on to the page by itself, under
   an address of its own or in the page's place under the page's own address — or the document there
-  is still loading, the browser keeps watching for up to ten seconds within the deadline, then reads
-  the page it came to as any page is read. Nothing is clicked or solved: a check that does not move on
-  by itself is read as it stands once the wait ends. The consumer that knows its site names the test,
-  and this layer names no site; a site tool names it as data the web helper makes the test of
-  (docs/site-contract.md, 「What a tool is given」).
+  is still loading, the browser keeps watching until the test passes or the page has come to rest, then
+  reads the page it came to as any page is read.
+  - The page has come to rest when the document standing in it has loaded, Chrome has given its own
+    network-idle mark for that document, and no navigation is scheduled. A check that moves on by
+    itself loads another document or asks the network as it works, and either keeps the watch going.
+  - Nothing is clicked or solved: a check that waits for a person comes to rest and is read as it stands.
+    So is a check that waits on a timer of its own with nothing on the network; one that holds the network
+    open without moving on is watched until its caller lets go of the read.
+  - The consumer that knows its site names the test, and this layer names no site; a site tool names it
+    as data the web helper makes the test of (docs/site-contract.md, 「What a tool is given」).
 - **At the end:**
-  - Chrome is terminated and reaped.
-  - That Chrome's Xvfb is stopped.
+  - Chrome is asked to close, sent `SIGTERM`, and waited for until it has ended.
+  - That Chrome's Xvfb is sent `SIGTERM` and waited for until it has ended.
   - The temporary profile and the config and cache under it are deleted.
-- **Limits:** navigation and script settling each have a deadline and a snapshot size limit.
+- **A navigation waits for the page's load event,** or for Chrome or its DevTools connection to end.
+- **The page is read once it holds still:** two snapshots taken 150 ms apart that agree, or the snapshot
+  standing two seconds after the load. A page that keeps changing its own text — a clock, a ticker — never
+  agrees with itself, and the two seconds say when its snapshot is taken; they never fail the read. A
+  snapshot has a size limit.
 - **One navigation at a time** in the same context, so concurrent fallbacks never overwrite each other's
   page, status or cookie observations.
 - **If the process that started Chrome dies suddenly** — the web helper, or the tool host for a
@@ -300,8 +323,7 @@
   returned.
 - **No claims of bypassing:** a real browser having seen a challenge is not success, and nothing is
   recorded as having "bypassed" or "cleared" any protection.
-- **Chrome failures:** if Chrome cannot be started, or cannot be closed in time, that is left as a
-  failure as it is.
+- **Chrome failures:** if Chrome cannot be started, that is left as a failure as it is.
 
 ## Search engines
 
@@ -419,10 +441,11 @@ Measured from the deployment's network with the engines' own forms of request:
   - The cause is written to this repository's store with the time.
   - The engine rests for that cause's length: `network` and a challenge still standing after the
     real browser, one hour; `rate` and `client-shape`, three minutes; any other failure — a `5xx`,
-    a timeout, a broken connection — five seconds.
+    a refused or broken connection — five seconds.
   - A longer `Retry-After` is followed.
-- **Not engine suspensions:** the caller's own deadline or cancellation is no evidence that the engine
-  blocked anything.
+  - A rest says when the engine is asked again; it never ends a request already under way.
+- **Not engine suspensions:** a search its caller let go of is no evidence that the engine blocked
+  anything, and writes nothing of the engine it was asking.
 
 ### An engine answering off the query
 
@@ -446,7 +469,7 @@ Measured from the deployment's network with the engines' own forms of request:
   after a remedy
 - `degraded` — an answer came, but it was off the query
 - `suspended` — resting until a set time for a diagnosed cause
-- `unknown` — not yet asked, or not started before the search's deadline
+- `unknown` — not yet asked
 
 ### Reporting
 

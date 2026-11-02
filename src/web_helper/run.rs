@@ -1,4 +1,4 @@
-//! One record's web reading (docs/web-access.md, 「One session, one investigation」): its research close and
+//! One record's web reading (docs/web-access.md, 「One session, one investigation」): its page budget and
 //! the search refusals it has met, its session — the direct client's jar, the pacing, the real Chrome it falls
 //! back to — and the research branches it asks for. A record holds one, in its web helper, which opens it as
 //! it starts and closes it as it ends.
@@ -17,8 +17,6 @@ use crate::web::session::{FetchPage, FetchSlice, SessionParts, WebSession};
 use crate::web::{Failure, WebError, WebResult};
 use crate::web_helper::branch::Branches;
 
-pub const RESEARCH_CLOSED: &str = "RESEARCH CLOSED: this run's research time is over, so no new search or page is started. Write the result now from what you already have, citing only pages that were actually read, and say plainly what could not be confirmed.";
-
 pub const SEARCH_STOPPED: &str = "SEARCH UNAVAILABLE (not asked again in this run): the search engines refused twice in a row, so another query would meet the same refusal. Work from the pages already in hand and say plainly in the result that the search itself could not run.";
 
 pub const BUDGET_SPENT: &str = "BUDGET SPENT: this run has read every page its budget allows, so no further page is read. Write the result now from what you already have, citing only pages that were actually read, and put what stays open under UNCONFIRMED.";
@@ -32,8 +30,6 @@ pub const RESEARCH_LABEL: &str = "research";
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Research {
-  /// Epoch milliseconds after which the web tools refuse new work; none where the record names no deadline.
-  pub closes_at: Option<u64>,
   /// How pages are read: `direct-then-browser` where none is named, `browser-first` or `direct-only`.
   pub strategy: Option<String>,
   pub host_interval_ms: Option<u64>,
@@ -69,12 +65,9 @@ impl Research {
   }
 }
 
-/// The research close a run's tools are held to, the search refusals met in a row, and the pages read against
-/// the record's budget.
+/// The search refusals a run's tools have met in a row, and the pages read against the record's budget.
 pub struct ResearchGuard {
-  closes_at: Option<u64>,
   unavailable_in_a_row: AtomicU32,
-  clock: Arc<dyn Clock>,
   pages: Option<u32>,
   read: Mutex<Read>,
 }
@@ -87,16 +80,10 @@ struct Read {
 }
 
 impl ResearchGuard {
-  pub fn new(closes_at: Option<u64>, clock: Arc<dyn Clock>) -> Self {
-    Self::with_budget(closes_at, None, clock)
-  }
-
-  /// A guard holding the record's page budget as well, none where it names none.
-  pub fn with_budget(closes_at: Option<u64>, pages: Option<u32>, clock: Arc<dyn Clock>) -> Self {
+  /// A guard holding the record's page budget, none where it names none.
+  pub fn new(pages: Option<u32>) -> Self {
     Self {
-      closes_at,
       unavailable_in_a_row: AtomicU32::new(0),
-      clock,
       pages,
       read: Mutex::new(Read::default()),
     }
@@ -123,21 +110,6 @@ impl ResearchGuard {
     }
 
     None
-  }
-
-  /// The refusal a tool answers with once research has closed, or none while it is open.
-  pub fn closed(&self) -> Option<&'static str> {
-    self.closes_at.filter(|at| self.clock.now() >= *at).map(|_| RESEARCH_CLOSED)
-  }
-
-  /// The deadline a request started now must finish inside.
-  pub fn deadline(&self) -> Option<u64> {
-    self.closes_at
-  }
-
-  /// Now, on the clock the close is read by.
-  pub fn now(&self) -> u64 {
-    self.clock.now()
   }
 
   /// The answer a search gets without asking the engines, once they have refused twice in a row.
@@ -171,7 +143,7 @@ impl WebRun {
     let clock: Arc<dyn Clock> = Arc::new(SystemClock);
 
     Ok(Self {
-      guard: ResearchGuard::with_budget(research.closes_at, research.pages, clock.clone()),
+      guard: ResearchGuard::new(research.pages),
       session: Arc::new(WebSession::new(SessionParts {
         store: Arc::new(StorePacing::new(crate::store::place(&data_root))),
         transport: crate::web::client::network(),
@@ -188,16 +160,16 @@ impl WebRun {
   }
 
   /// A reading over parts a test hands in.
-  pub fn with(research: Research, session: WebSession, clock: Arc<dyn Clock>) -> Self {
+  pub fn with(research: Research, session: WebSession) -> Self {
     Self {
-      guard: ResearchGuard::with_budget(research.closes_at, research.pages, clock),
+      guard: ResearchGuard::new(research.pages),
       session: Arc::new(session),
       branches: Branches::new(),
       research,
     }
   }
 
-  /// One page as `web_fetch` reads it, by the run's strategy, under its deadline.
+  /// One page as `web_fetch` reads it, by the run's strategy.
   pub async fn read_page(
     &self,
     url: &str,
@@ -214,7 +186,6 @@ impl WebRun {
           offset,
           max_chars,
           raw,
-          deadline_ms: self.guard.deadline(),
           browser_fallback: !self.research.direct_only(),
           browser_first: self.research.browser_first(),
           pdf_layout: layout,
@@ -223,13 +194,9 @@ impl WebRun {
       .await
   }
 
-  /// What a failed request answers: the research close where that is what it ran into, the error otherwise.
-  pub fn closed_or(&self, error: &WebError) -> crate::tool::Answer {
-    if error.kind == Failure::Deadline && self.guard.closed().is_some() {
-      crate::tool::Answer::text(RESEARCH_CLOSED)
-    } else {
-      crate::tool::Answer::refusal(fetch_error_text(error))
-    }
+  /// What a failed request answers: the error, said as a refusal.
+  pub fn failed(&self, error: &WebError) -> crate::tool::Answer {
+    crate::tool::Answer::refusal(fetch_error_text(error))
   }
 
   /// The run's branch requests still waiting dropped, and its browser and profile ended, as its record goes.

@@ -94,7 +94,7 @@ async fn one_pacing_name_s_requests_are_paced_together_and_apart_from_another_s(
   let one = Paced::new("search:7", StorePacing::new(store::place(root.path())));
   let other = Paced::new("search:8", StorePacing::new(store::place(root.path())));
 
-  assert_eq!(one.reserve("page:example.org", 250, 60_000, 1_000).await.unwrap(), Some(1_000));
-  assert_eq!(one.reserve("page:example.org", 250, 60_000, 1_000).await.unwrap(), Some(1_250));
-  assert_eq!(other.reserve("page:example.org", 250, 60_000, 1_000).await.unwrap(), Some(1_000));
+  assert_eq!(one.reserve("page:example.org", 250, 1_000).await.unwrap(), 1_000);
+  assert_eq!(one.reserve("page:example.org", 250, 1_000).await.unwrap(), 1_250);
+  assert_eq!(other.reserve("page:example.org", 250, 1_000).await.unwrap(), 1_000);
 }

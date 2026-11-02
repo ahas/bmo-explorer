@@ -268,13 +268,20 @@ impl ServerHandler for ExplorerServer {
   async fn call_tool(
     &self,
     request: CallToolRequestParams,
-    _: RequestContext<RoleServer>,
+    context: RequestContext<RoleServer>,
   ) -> Result<CallToolResponse, ErrorData> {
     let Some(tool) = self.tools.iter().find(|tool| tool.name == request.name) else {
       return Err(ErrorData::invalid_params(format!("There is no tool {}.", request.name), None));
     };
     let arguments = Value::Object(request.arguments.unwrap_or_default());
-    let result = match tool.call(&self.client, arguments).await {
+    // A call the harness cancels drops its read with everything under way for it; no clock ends one.
+    let answered = tokio::select! {
+      answered = tool.call(&self.client, arguments) => answered,
+      () = context.ct.cancelled() => {
+        return Err(ErrorData::internal_error(format!("The call of {} was cancelled.", request.name), None));
+      }
+    };
+    let result = match answered {
       Ok(answer) => CallToolResult::structured(answer),
       Err(failure) => CallToolResult::error(vec![ContentBlock::text(
         serde_json::to_string(&failure).unwrap_or_else(|_| failure.to_string()),

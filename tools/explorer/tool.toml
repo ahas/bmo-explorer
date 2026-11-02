@@ -9,7 +9,6 @@ language = "rust"
 build = 'cargo build --release -p explorer-tool && cp "$BMO_CARGO_TARGET/release/explorer-tool" "$BMO_TOOL_OUT/"'
 check = 'cargo test --test tools'
 run = ["explorer-tool"]
-timeout = 180
 
 [[entry]]
 namespace = "explorer"

@@ -13,8 +13,6 @@ use serde::{Deserialize, Serialize};
 pub enum Failure {
   /// A refusal or a challenge in place of the page.
   Blocked,
-  /// The caller's deadline, or the research close, came first.
-  Deadline,
   /// This machine's own address policy refused the address before the site was asked.
   UnsafeAddress,
   /// The body was more than this machine reads.

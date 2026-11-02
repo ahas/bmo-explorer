@@ -5,7 +5,8 @@ own, `explorer/explorer.db` under the data root (docs/api.md, 「Settings and da
 reads it; what another unit needs of it is answered through docs/api.md. The store makes its tables as it
 is first opened, and drops a table of the file that is not among them. Every process of this repository —
 the web helper of each record, a tool, the MCP server — opens the same file, so the pacing queues hold
-across them.
+across them. A statement that finds the file locked by another process waits for the lock, however long that
+process holds it.
 
 ## The tables
 

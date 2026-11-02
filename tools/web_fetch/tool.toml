@@ -9,7 +9,6 @@ language = "rust"
 build = 'cargo build --release -p web-fetch-tool && cp "$BMO_CARGO_TARGET/release/web-fetch-tool" "$BMO_TOOL_OUT/"'
 check = 'cargo test --test tools'
 run = ["web-fetch-tool"]
-timeout = 600
 shared = ["web"]
 
 [[entry]]

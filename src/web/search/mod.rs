@@ -55,7 +55,6 @@ pub struct Search<'a> {
   pub count: Option<usize>,
   pub language: Option<&'a str>,
   pub category: Option<&'a str>,
-  pub deadline_ms: Option<u64>,
   pub engine_interval_ms: Option<u64>,
   /// The engines to ask by their roster names, in place of the category's; the category's where it is empty.
   pub engines: &'a [&'a str],
@@ -208,14 +207,9 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
     return Err(WebError::new(format!("Unsupported search category: {category}"), Failure::Transport));
   }
 
-  let deadline_ms = search
-    .deadline_ms
-    .unwrap_or(u64::MAX)
-    .min(clock.now() + crate::web::session::FETCH_TIMEOUT_MS);
   let engine_roads = EngineRoads {
     store: roads.store,
     interval_ms: search.engine_interval_ms.unwrap_or(SEARCH_ENGINE_INTERVAL_MS),
-    deadline_ms,
     check: roads.check,
     transport: roads.transport,
     render: roads.render.clone(),
@@ -263,43 +257,19 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
     };
 
     match ask_engine(engine, &query, &engine_roads).await? {
-      Outcome::Late => {
-        let reason = "not started before the search deadline";
-
-        health.push(
-          observed(
-            roads.store,
-            health_of(name, EngineState::Unknown, Some(reason.into()), None, None, None),
-          )
-          .await?,
+      Outcome::Failed { reason, elapsed_ms } => {
+        // A failure of the ordinary kind rests the engine briefly.
+        let seen = health_of(
+          name,
+          EngineState::Suspended,
+          Some(reason.clone()),
+          Some(elapsed_ms),
+          None,
+          Some(clock.now() + rest_ms(None, false)),
         );
-        unresponsive.push(format!("{name} ({reason})"));
-      }
-      Outcome::Failed {
-        reason,
-        timed_out,
-        elapsed_ms,
-      } => {
-        // The caller's own deadline is no evidence against the engine; anything else rests it briefly.
-        let seen = if timed_out {
-          health_of(name, EngineState::Unknown, Some(reason.clone()), Some(elapsed_ms), None, None)
-        } else {
-          health_of(
-            name,
-            EngineState::Suspended,
-            Some(reason.clone()),
-            Some(elapsed_ms),
-            None,
-            Some(clock.now() + rest_ms(None, false)),
-          )
-        };
 
         health.push(observed(roads.store, seen).await?);
         unresponsive.push(format!("{name} ({reason})"));
-
-        if timed_out {
-          break;
-        }
       }
       Outcome::Refused {
         diagnosis,
@@ -412,13 +382,9 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
 
 /// The render road a search lends its engines, out of a session.
 pub fn render_through(session: Arc<crate::web::session::WebSession>) -> Render {
-  Arc::new(move |url: String, deadline_ms: u64| {
+  Arc::new(move |url: String| {
     let session = session.clone();
 
-    Box::pin(async move {
-      session
-        .render(&url, deadline_ms, false, crate::web::chrome::FetchOptions::default())
-        .await
-    })
+    Box::pin(async move { session.render(&url, false, crate::web::chrome::FetchOptions::default()).await })
   })
 }

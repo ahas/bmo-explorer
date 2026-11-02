@@ -68,12 +68,12 @@ async fn the_web_store_keeps_its_pacing_health_recipes_and_cookies() {
   let root = tempfile::tempdir().unwrap();
   let store = StorePacing::new(store::place(root.path()));
 
-  // A host's slots, one interval apart; none past the deadline, and nothing taken for it.
-  assert_eq!(store.reserve("page:a", 1_000, 20_000, 10_000).await.unwrap(), Some(10_000));
-  assert_eq!(store.reserve("page:a", 1_000, 20_000, 10_000).await.unwrap(), Some(11_000));
+  // A host's slots, one interval apart, each taken however far off it falls.
+  assert_eq!(store.reserve("page:a", 1_000, 10_000).await.unwrap(), 10_000);
+  assert_eq!(store.reserve("page:a", 1_000, 10_000).await.unwrap(), 11_000);
   store.defer("page:a", 50_000, 11_000).await.unwrap();
-  assert_eq!(store.reserve("page:a", 1_000, 20_000, 11_000).await.unwrap(), None);
-  assert_eq!(store.reserve("page:a", 1_000, 60_000, 11_000).await.unwrap(), Some(50_000));
+  assert_eq!(store.reserve("page:a", 1_000, 11_000).await.unwrap(), 50_000);
+  assert_eq!(store.reserve("page:a", 1_000, 11_000).await.unwrap(), 51_000);
 
   let health = EngineHealth {
     engine: "naver".into(),
@@ -130,11 +130,9 @@ async fn two_stores_on_one_place_are_handed_different_slots() {
   let root = tempfile::tempdir().unwrap();
   let one = StorePacing::new(store::place(root.path()));
   let other = StorePacing::new(store::place(root.path()));
-  let (first, second) = tokio::join!(
-    one.reserve("engine:naver", 1_000, 60_000, 10_000),
-    other.reserve("engine:naver", 1_000, 60_000, 10_000)
-  );
-  let mut slots = [first.unwrap().unwrap(), second.unwrap().unwrap()];
+  let (first, second) =
+    tokio::join!(one.reserve("engine:naver", 1_000, 10_000), other.reserve("engine:naver", 1_000, 10_000));
+  let mut slots = [first.unwrap(), second.unwrap()];
 
   slots.sort_unstable();
   assert_eq!(slots, [10_000, 11_000]);

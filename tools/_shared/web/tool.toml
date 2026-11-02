@@ -1,5 +1,5 @@
-# The web helper: one record's web reading — its research close and its web session with the standard Chrome a
-# fetch falls back to — which the web's core tools and every site tool ask on its socket
+# The web helper: one record's web reading — its page budget and search refusals, and its web session with the
+# standard Chrome a fetch falls back to — which the web's core tools and every site tool ask on its socket
 # (docs/site-contract.md, 「The web helper's socket」).
 
 [tool]
@@ -9,7 +9,6 @@ language = "rust"
 build = 'cargo build --release -p web-helper && cp "$BMO_CARGO_TARGET/release/web-helper" "$BMO_TOOL_OUT/"'
 check = 'cargo test --test web_helper'
 run = ["web-helper"]
-timeout = 30
 
 [helper]
-description = "One record's web reading: its research close, and its web session and Chrome."
+description = "One record's web reading: its page budget and search refusals, and its web session and Chrome."

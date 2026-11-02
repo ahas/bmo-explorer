@@ -1,5 +1,5 @@
-//! The time a web read keeps: deadlines are epoch milliseconds, as the session record and the store's
-//! pacing hold them, and a test hands in a clock of its own so a wait costs it no real time.
+//! The time a web read keeps: times are epoch milliseconds, as the store's pacing holds them, and a test
+//! hands in a clock of its own so a wait costs it no real time.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -65,9 +65,4 @@ impl Clock for StandingClock {
     self.advance(ms);
     Box::pin(std::future::ready(()))
   }
-}
-
-/// The milliseconds left before a deadline, at least one, as a timeout.
-pub fn left(deadline_ms: u64, now: u64) -> Duration {
-  Duration::from_millis(deadline_ms.saturating_sub(now).max(1))
 }

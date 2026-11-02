@@ -49,10 +49,10 @@ impl Paced {
 }
 
 impl Pacing for Paced {
-  fn reserve(&self, key: &str, interval_ms: u64, deadline_ms: u64, now: u64) -> Boxed<'_, Option<u64>> {
+  fn reserve(&self, key: &str, interval_ms: u64, now: u64) -> Boxed<'_, u64> {
     let key = self.key(key);
 
-    Box::pin(async move { self.store.reserve(&key, interval_ms, deadline_ms, now).await })
+    Box::pin(async move { self.store.reserve(&key, interval_ms, now).await })
   }
 
   fn defer(&self, key: &str, until_ms: u64, now: u64) -> Boxed<'_, ()> {

@@ -314,6 +314,7 @@ dependencies = [
  "hyper-util",
  "image",
  "libc",
+ "libsqlite3-sys",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",

@@ -2,7 +2,6 @@ use std::sync::{Arc, Mutex};
 
 use bmo_explorer::forms::Failure;
 use bmo_explorer::web::address::Check;
-use bmo_explorer::web::clock::StandingClock;
 use bmo_explorer::web::pacing::MemoryPacing;
 use bmo_explorer::web::session::{SessionParts, WebSession};
 
@@ -12,8 +11,6 @@ use bmo_explorer::web_helper::run::{Research, WebRun};
 // A reading on the trusted road test fixtures take (docs/web-access.md, 「Address checks」), or on the road every
 // other read takes.
 fn reading(trusted: bool) -> WebRun {
-  let clock = StandingClock::at(1_000);
-
   WebRun::with(
     Research::default(),
     WebSession::new(SessionParts {
@@ -26,7 +23,6 @@ fn reading(trusted: bool) -> WebRun {
       host_interval_ms: 0,
       browsers: None,
     }),
-    clock,
   )
 }
 

@@ -1,8 +1,9 @@
 //! The real Chrome a read falls back to (docs/web-access.md, 「Direct collection and real Chrome」): standard
 //! Chrome, non-headless, on a private display of its own, with a fresh temporary profile, every request it
 //! makes sent through a proxy that connects only to an address the caller's check has just passed, and every
-//! request a page makes paused and checked the same way before Chrome sends it. One navigation at a time; a
-//! Chrome nothing has used for three minutes ends and gives its machine place back.
+//! request a page makes paused and checked the same way before Chrome sends it. One navigation at a time, each
+//! waited for until its page has loaded or Chrome has gone; a Chrome no read has used for three minutes ends
+//! and gives its machine place back.
 
 pub mod cdp;
 pub mod detached;
@@ -16,7 +17,7 @@ use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -52,7 +53,7 @@ pub struct Link {
 /// The check every request of this Chrome passes: the address the host may be connected at, none on a
 /// trusted road that checks nothing, or a refusal.
 pub type UrlGuard =
-  Arc<dyn Fn(String, u64) -> Pin<Box<dyn Future<Output = WebResult<Option<IpAddr>>> + Send>> + Send + Sync>;
+  Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = WebResult<Option<IpAddr>>> + Send>> + Send + Sync>;
 
 /// Whether the address a page stands at, with the document's title, is the page that was asked for, for a
 /// site whose own browser check runs its script and moves on to the page by itself.
@@ -69,19 +70,20 @@ pub trait BrowserFetcher: Send + Sync {
   fn fetch(
     &self,
     url: String,
-    deadline_ms: u64,
     options: FetchOptions,
   ) -> Pin<Box<dyn Future<Output = WebResult<BrowserDocument>> + Send + '_>>;
   fn close(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
 }
 
-const CLOSE_WAIT: Duration = Duration::from_secs(3);
-const PROXY_CHECK_MS: u64 = 10_000;
 const SNAPSHOT_CHARS: usize = 4_000_000;
 const LINK_CAP: usize = 1_000;
 const LINK_FIELD_CAP: usize = 2_000;
-const ARRIVAL_CAP_MS: u64 = 10_000;
+// How often the watch for a page's arrival looks again.
 const ARRIVAL_POLL_MS: u64 = 250;
+// After the load, how far apart two snapshots are taken to see whether the page holds still, and when the
+// snapshot of a page that never does is taken. It says when to read; it never fails the read.
+const SETTLE_POLL_MS: u64 = 150;
+const SETTLE_MS: u64 = 2_000;
 
 fn idle_ms() -> u64 {
   std::env::var("BMO_CHROME_IDLE_SECONDS")
@@ -154,12 +156,14 @@ pub fn fails_the_page(
     || (resource_type == Some("Document") && frame.is_some() && frame == main_frame)
 }
 
-/// Watches what a page stands at until `arrived` takes it or `until_ms` comes; whether it arrived. A read that
-/// fails — the page between two documents — is read again on the next turn.
+/// Watches what a page stands at until `arrived` takes it or `rested` says the page has come to rest; whether
+/// it arrived. A page that has come to rest is read once more after it did, so a check that moved on just
+/// before resting is taken. A read that fails — the page between two documents — is read again on the next
+/// turn.
 pub async fn await_arrival<Read, Fut>(
   mut read: Read,
   arrived: &Arrived,
-  until_ms: u64,
+  rested: impl Fn() -> bool,
   clock: &dyn crate::web::clock::Clock,
 ) -> bool
 where
@@ -167,13 +171,15 @@ where
   Fut: Future<Output = Result<(String, String), WebError>>,
 {
   loop {
+    let at_rest = rested();
+
     if let Ok((url, title)) = read().await
       && arrived(&url, &title)
     {
       return true;
     }
 
-    if clock.now() + ARRIVAL_POLL_MS >= until_ms {
+    if at_rest {
       return false;
     }
 
@@ -187,18 +193,73 @@ struct DocumentResponse {
   mime_type: String,
 }
 
-// What the page's events have shown of the navigation under way.
+// What the page's events have shown of the navigation under way: its document's answer, a refusal, and
+// whether the document standing in the main frame has come to rest.
 #[derive(Default)]
 struct PageWatch {
   response: Mutex<Option<DocumentResponse>>,
   blocked: Mutex<Option<WebError>>,
   blocked_now: tokio::sync::Notify,
   main_frame: Mutex<Option<String>>,
-  navigation_deadline: AtomicU64,
+  // The loader of the document last begun in the main frame, the one Chrome last marked network-idle, and
+  // whether a navigation is scheduled.
+  document: Mutex<Option<String>>,
+  idle: Mutex<Option<String>>,
+  scheduled: AtomicBool,
+}
+
+impl PageWatch {
+  // Whether the main frame's document has come to rest: Chrome's network-idle mark given for the document
+  // standing there, and no navigation scheduled from it.
+  fn rested(&self) -> bool {
+    let idle = locked(&self.idle).clone();
+    let document = locked(&self.document).clone();
+
+    idle.is_some() && (document.is_none() || idle == document) && !self.scheduled.load(Ordering::SeqCst)
+  }
+
+  // A lifecycle or navigation event of the page, recorded where it is the main frame's.
+  fn observe(&self, method: &str, params: &Value) {
+    let main = locked(&self.main_frame).clone();
+
+    if params["frameId"].as_str() != main.as_deref() {
+      return;
+    }
+
+    let loader = params["loaderId"].as_str().map(str::to_owned);
+
+    match (method, params["name"].as_str()) {
+      ("Page.lifecycleEvent", Some("init")) => {
+        *locked(&self.document) = loader;
+        *locked(&self.idle) = None;
+        self.scheduled.store(false, Ordering::SeqCst);
+      }
+      ("Page.lifecycleEvent", Some("networkIdle")) => *locked(&self.idle) = loader,
+      ("Page.frameScheduledNavigation", _) => self.scheduled.store(true, Ordering::SeqCst),
+      ("Page.frameClearedScheduledNavigation", _) => self.scheduled.store(false, Ordering::SeqCst),
+      _ => {}
+    }
+  }
 }
 
 fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
   mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+// A read counted as using the browser for as long as it stands, however it ends: its caller may let go of it
+// part way, and the browser then becomes idle all the same.
+struct Using<'a> {
+  chrome: &'a Chrome,
+}
+
+impl Drop for Using<'_> {
+  fn drop(&mut self) {
+    let inner = &self.chrome.inner;
+
+    if inner.busy.fetch_sub(1, Ordering::SeqCst) == 1 && !inner.closing.load(Ordering::SeqCst) {
+      self.chrome.arm_idle();
+    }
+  }
 }
 
 // One Chrome as it runs, with everything started for it.
@@ -319,7 +380,7 @@ impl Chrome {
     }
   }
 
-  async fn start(&self, deadline_ms: u64) -> WebResult<Running> {
+  async fn start(&self) -> WebResult<Running> {
     let setpriv = display::setpriv();
 
     if !Path::new(&self.inner.chrome).exists() || !Path::new(&setpriv).exists() {
@@ -333,9 +394,9 @@ impl Chrome {
     }
 
     let paths = places::place_paths();
-    let place = places::take_any(&paths, deadline_ms).await.ok_or_else(|| {
+    let place = places::take_any(&paths).await.map_err(|why| {
       WebError::new(
-        format!("All {} Chrome places on this machine stayed taken until the deadline", paths.len()),
+        format!("No Chrome place on this machine can be taken: {why}"),
         Failure::BrowserUnavailable,
       )
     })?;
@@ -353,7 +414,7 @@ impl Chrome {
       .map_err(unavailable)?;
 
     // What was started is taken down again where the start goes no further.
-    let mut display = match display::PrivateDisplay::start(&profile_dir, deadline_ms).await {
+    let mut display = match display::PrivateDisplay::start(&profile_dir).await {
       Ok(display) => display,
       Err(error) => {
         profile::remove(&profile_dir, &profile::LiveProcesses).await;
@@ -364,7 +425,7 @@ impl Chrome {
     let resolver: proxy::Resolver = Arc::new(move |url: String| {
       let guard = guard.clone();
 
-      Box::pin(async move { guard(url, now_ms() + PROXY_CHECK_MS).await.map_err(|error| error.message) })
+      Box::pin(async move { guard(url).await.map_err(|error| error.message) })
     });
     let proxy = match proxy::start(resolver).await {
       Ok(proxy) => proxy,
@@ -377,7 +438,7 @@ impl Chrome {
         ));
       }
     };
-    let started = self.launch(&setpriv, &profile_dir, &display, &proxy, deadline_ms).await;
+    let started = self.launch(&setpriv, &profile_dir, &display, &proxy).await;
 
     match started {
       Ok((child, connection, watch)) => Ok(Running {
@@ -410,7 +471,6 @@ impl Chrome {
     profile_dir: &Path,
     display: &display::PrivateDisplay,
     proxy: &proxy::PinnedProxy,
-    deadline_ms: u64,
   ) -> Result<Launched, Box<LaunchFailure>> {
     let port = free_loopback_port().map_err(|error| failure(None, error))?;
     let environment = launch_environment(
@@ -434,43 +494,31 @@ impl Chrome {
       .spawn()
       .map_err(|why| failure(None, WebError::new(format!("Standard Chrome could not start: {why}"), Failure::BrowserUnavailable)))?;
     let local = reqwest::Client::new();
-    let mut listening = false;
 
-    while now_ms() < deadline_ms {
-      if let Ok(Some(status)) = child.try_wait() {
-        return Err(failure(
-          None,
-          WebError::new(
-            format!("Standard Chrome exited during startup ({status})"),
-            Failure::BrowserUnavailable,
-          ),
-        ));
-      }
+    // The endpoint appears after Chrome has brought up the new profile: it is asked again until it answers,
+    // or until Chrome has exited.
+    loop {
+      let asked = local.get(format!("http://127.0.0.1:{port}/json/version")).send();
+      let answered = tokio::select! {
+        exited = child.wait() => {
+          let said = exited.map_or_else(|why| why.to_string(), |status| status.to_string());
 
-      // The endpoint appears after Chrome has brought up the new profile.
-      let asked = local
-        .get(format!("http://127.0.0.1:{port}/json/version"))
-        .timeout(Duration::from_millis(250))
-        .send()
-        .await;
+          return Err(failure(
+            None,
+            WebError::new(format!("Standard Chrome exited during startup ({said})"), Failure::BrowserUnavailable),
+          ));
+        }
+        asked = asked => asked,
+      };
 
-      if asked.is_ok_and(|answer| answer.status().is_success()) {
-        listening = true;
+      if answered.is_ok_and(|answer| answer.status().is_success()) {
         break;
       }
 
       tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
-    if !listening {
-      return Err(failure(Some(child), cdp::deadline_error("startup")));
-    }
-
-    let listed = local
-      .get(format!("http://127.0.0.1:{port}/json/list"))
-      .timeout(Duration::from_secs(2))
-      .send()
-      .await;
+    let listed = local.get(format!("http://127.0.0.1:{port}/json/list")).send().await;
     let targets: Vec<Value> = match listed {
       Ok(answer) => answer.json().await.unwrap_or_default(),
       Err(_) => Vec::new(),
@@ -504,6 +552,9 @@ impl Chrome {
           }
         }
       }
+      "Page.lifecycleEvent" | "Page.frameScheduledNavigation" | "Page.frameClearedScheduledNavigation" => {
+        handler_watch.observe(method, params);
+      }
       "Fetch.requestPaused" => {
         let sender = sender.clone();
         let watch = handler_watch.clone();
@@ -514,24 +565,24 @@ impl Chrome {
       }
       _ => {}
     });
-    let connection = match cdp::Connection::open(&address, deadline_ms, handle).await {
+    let connection = match cdp::Connection::open(&address, handle).await {
       Ok(connection) => connection,
       Err(error) => return Err(failure(Some(child), error)),
     };
     let sender = connection.sender.clone();
     let enabled = async {
-      sender.command("Page.enable", json!({}), deadline_ms).await?;
-      sender.command("Runtime.enable", json!({}), deadline_ms).await?;
-      sender.command("Network.enable", json!({}), deadline_ms).await?;
+      sender.command("Page.enable", json!({})).await?;
+      sender.command("Page.setLifecycleEventsEnabled", json!({ "enabled": true })).await?;
+      sender.command("Runtime.enable", json!({})).await?;
+      sender.command("Network.enable", json!({})).await?;
       sender
         .command(
           "Fetch.enable",
           json!({ "patterns": [{ "urlPattern": "*", "requestStage": "Request" }] }),
-          deadline_ms,
         )
         .await?;
 
-      let tree = sender.command("Page.getFrameTree", json!({}), deadline_ms).await?;
+      let tree = sender.command("Page.getFrameTree", json!({})).await?;
 
       tree["frameTree"]["frame"]["id"]
         .as_str()
@@ -549,7 +600,7 @@ impl Chrome {
   }
 
   // The Chrome this work drives, started where none runs.
-  async fn ensure<'a>(&self, running: &'a mut Option<Running>, deadline_ms: u64) -> WebResult<&'a Running> {
+  async fn ensure<'a>(&self, running: &'a mut Option<Running>) -> WebResult<&'a Running> {
     if self.inner.closing.load(Ordering::SeqCst) {
       return Err(WebError::new("Chrome session is closing", Failure::BrowserUnavailable));
     }
@@ -561,22 +612,17 @@ impl Chrome {
     }
 
     if running.is_none() {
-      *running = Some(self.start(deadline_ms).await?);
+      *running = Some(self.start().await?);
     }
 
     Ok(running.as_ref().expect("a Chrome was just started"))
   }
 
-  async fn snapshot(
-    sender: &cdp::Sender,
-    watch: &PageWatch,
-    deadline_ms: u64,
-  ) -> WebResult<BrowserDocument> {
+  async fn snapshot(sender: &cdp::Sender, watch: &PageWatch) -> WebResult<BrowserDocument> {
     let raw = sender
       .command(
         "Runtime.evaluate",
         json!({ "expression": snapshot_expression(), "returnByValue": true, "awaitPromise": true }),
-        deadline_ms,
       )
       .await?;
     let snapshot: Snapshot = serde_json::from_value(raw["result"]["value"].clone())
@@ -609,22 +655,25 @@ impl Chrome {
     &self,
     running: &Running,
     url: &str,
-    deadline_ms: u64,
     options: &FetchOptions,
   ) -> WebResult<BrowserDocument> {
     let sender = running.sender();
     let watch = &running.watch;
 
-    (self.inner.guard)(url.to_owned(), deadline_ms).await?;
-    watch.navigation_deadline.store(deadline_ms, Ordering::SeqCst);
+    (self.inner.guard)(url.to_owned()).await?;
     *locked(&watch.response) = None;
     *locked(&watch.blocked) = None;
 
     let mut events = running.connection.events.subscribe();
     let blocked = || locked(&watch.blocked).clone();
+    let refused = || {
+      blocked().unwrap_or_else(|| {
+        WebError::new(format!("Chrome navigation to {url} was refused"), Failure::Blocked).with_url(url)
+      })
+    };
     let navigated = tokio::select! {
-      answer = sender.command("Page.navigate", json!({ "url": url }), deadline_ms) => answer?,
-      () = watch.blocked_now.notified() => return Err(blocked().unwrap_or_else(|| cdp::deadline_error("navigation"))),
+      answer = sender.command("Page.navigate", json!({ "url": url })) => answer?,
+      () = watch.blocked_now.notified() => return Err(refused()),
     };
 
     if let Some(error_text) = navigated.get("errorText").and_then(Value::as_str) {
@@ -632,7 +681,7 @@ impl Chrome {
     }
 
     tokio::select! {
-      loaded = cdp::event(&mut events, "Page.loadEventFired", deadline_ms) => { loaded?; }
+      loaded = cdp::event(&mut events, "Page.loadEventFired") => { loaded?; }
       () = watch.blocked_now.notified() => {}
     }
 
@@ -645,11 +694,7 @@ impl Chrome {
         let expression =
           "document.readyState === \"complete\" ? { url: location.href, title: document.title } : null";
         let raw = sender
-          .command(
-            "Runtime.evaluate",
-            json!({ "expression": expression, "returnByValue": true }),
-            deadline_ms.min(now_ms() + 2_000),
-          )
+          .command("Runtime.evaluate", json!({ "expression": expression, "returnByValue": true }))
           .await?;
         let page = &raw["result"]["value"];
 
@@ -659,10 +704,11 @@ impl Chrome {
         }
       };
 
+      // A Chrome gone ends the watch too; the snapshot below then fails as the connection's end.
       await_arrival(
         read,
         arrived,
-        deadline_ms.min(now_ms() + ARRIVAL_CAP_MS),
+        || watch.rested() || !sender.is_reading(),
         &crate::web::clock::SystemClock,
       )
       .await;
@@ -672,16 +718,17 @@ impl Chrome {
       }
     }
 
-    // Dynamic pages often fill their root just after load. Stop as soon as two bounded snapshots agree; never
-    // a network-idle wait that advertisements can hold open.
+    // Dynamic pages often fill their root just after load. Read as soon as two snapshots agree, and take the
+    // snapshot standing at the settle's end of a page whose own text never stops changing; never a
+    // network-idle wait that advertisements can hold open.
     let mut prior = String::new();
-    let mut document = Self::snapshot(sender, watch, deadline_ms).await?;
-    let settle_until = deadline_ms.min(now_ms() + 2_000);
+    let mut document = Self::snapshot(sender, watch).await?;
+    let settle_until = now_ms() + SETTLE_MS;
 
-    while now_ms() + 150 < settle_until {
-      tokio::time::sleep(Duration::from_millis(150)).await;
+    while now_ms() + SETTLE_POLL_MS < settle_until {
+      tokio::time::sleep(Duration::from_millis(SETTLE_POLL_MS)).await;
 
-      let next = Self::snapshot(sender, watch, deadline_ms).await?;
+      let next = Self::snapshot(sender, watch).await?;
       let marker = format!("{}\0{}\0{}", next.url, next.title, next.text);
 
       document = next;
@@ -697,7 +744,7 @@ impl Chrome {
       return Err(refusal);
     }
 
-    (self.inner.guard)(document.url.clone(), deadline_ms).await?;
+    (self.inner.guard)(document.url.clone()).await?;
     Ok(document)
   }
 
@@ -706,21 +753,15 @@ impl Chrome {
   async fn queued<T>(&self, work: impl AsyncFnOnce(&mut Option<Running>) -> WebResult<T>) -> WebResult<T> {
     self.inner.busy.fetch_add(1, Ordering::SeqCst);
 
+    let _using = Using { chrome: self };
+
     if let Some(idle) = locked(&self.inner.idle).take() {
       idle.abort();
     }
 
-    let result = {
-      let mut running = self.inner.running.lock().await;
+    let mut running = self.inner.running.lock().await;
 
-      work(&mut running).await
-    };
-
-    if self.inner.busy.fetch_sub(1, Ordering::SeqCst) == 1 && !self.inner.closing.load(Ordering::SeqCst) {
-      self.arm_idle();
-    }
-
-    result
+    work(&mut running).await
   }
 
   fn arm_idle(&self) {
@@ -749,19 +790,14 @@ impl Chrome {
   }
 
   /// One page read as Chrome renders it.
-  pub async fn read(
-    &self,
-    url: &str,
-    deadline_ms: u64,
-    options: FetchOptions,
-  ) -> WebResult<BrowserDocument> {
+  pub async fn read(&self, url: &str, options: FetchOptions) -> WebResult<BrowserDocument> {
     let this = self.clone();
 
     self
       .queued(async move |running: &mut Option<Running>| {
-        let held = this.ensure(running, deadline_ms).await?;
+        let held = this.ensure(running).await?;
 
-        this.navigate(held, url, deadline_ms, &options).await
+        this.navigate(held, url, &options).await
       })
       .await
   }
@@ -805,19 +841,11 @@ async fn answer_paused(sender: &cdp::Sender, watch: &PageWatch, guard: &UrlGuard
     || url.starts_with("https:")
     || url.starts_with("HTTP:")
     || url.starts_with("HTTPS:");
-  let checked = if web {
-    guard(url.to_owned(), watch.navigation_deadline.load(Ordering::SeqCst))
-      .await
-      .map(|_| ())
-  } else {
-    Ok(())
-  };
+  let checked = if web { guard(url.to_owned()).await.map(|_| ()) } else { Ok(()) };
 
   match checked {
     Ok(()) => {
-      let _ = sender
-        .command("Fetch.continueRequest", json!({ "requestId": request_id }), now_ms() + 5_000)
-        .await;
+      let _ = sender.command("Fetch.continueRequest", json!({ "requestId": request_id })).await;
     }
     Err(refusal) => {
       let main = locked(&watch.main_frame).clone();
@@ -832,7 +860,6 @@ async fn answer_paused(sender: &cdp::Sender, watch: &PageWatch, guard: &UrlGuard
           .command(
             "Fetch.failRequest",
             json!({ "requestId": request_id, "errorReason": "NameNotResolved" }),
-            now_ms() + 2_000,
           )
           .await;
         return;
@@ -843,7 +870,6 @@ async fn answer_paused(sender: &cdp::Sender, watch: &PageWatch, guard: &UrlGuard
         .command(
           "Fetch.failRequest",
           json!({ "requestId": request_id, "errorReason": "BlockedByClient" }),
-          now_ms() + 2_000,
         )
         .await;
       watch.blocked_now.notify_waiters();
@@ -851,7 +877,8 @@ async fn answer_paused(sender: &cdp::Sender, watch: &PageWatch, guard: &UrlGuard
   }
 }
 
-// Ends the Chrome and everything started for it, and gives its place back.
+// Ends the Chrome and everything started for it, and gives its place back. Chrome is asked to close and sent
+// `SIGTERM`, on which it ends, and is waited for until it has.
 async fn shut_down(mut running: Running) {
   running.connection.sender.tell("Browser.close", json!({}));
 
@@ -862,9 +889,7 @@ async fn shut_down(mut running: Running) {
     }
   }
 
-  if tokio::time::timeout(CLOSE_WAIT, running.child.wait()).await.is_err() {
-    let _ = running.child.kill().await;
-  }
+  let _ = running.child.wait().await;
 
   running.display.stop().await;
   running.proxy.stop();
@@ -888,10 +913,9 @@ impl BrowserFetcher for Chrome {
   fn fetch(
     &self,
     url: String,
-    deadline_ms: u64,
     options: FetchOptions,
   ) -> Pin<Box<dyn Future<Output = WebResult<BrowserDocument>> + Send + '_>> {
-    Box::pin(async move { self.read(&url, deadline_ms, options).await })
+    Box::pin(async move { self.read(&url, options).await })
   }
 
   fn close(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {

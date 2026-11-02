@@ -62,9 +62,9 @@ pub struct Recipe {
 pub const ENGINE_COOKIE_LIFETIME_MS: u64 = 7 * 24 * 60 * 60 * 1_000;
 
 pub trait Pacing: Send + Sync {
-  /// The next slot of `key` at least `interval_ms` after the last one handed out, taken; none where it
-  /// would fall after the deadline, and then nothing is taken.
-  fn reserve(&self, key: &str, interval_ms: u64, deadline_ms: u64, now: u64) -> Boxed<'_, Option<u64>>;
+  /// The next slot of `key` at least `interval_ms` after the last one handed out, taken however far off it
+  /// falls.
+  fn reserve(&self, key: &str, interval_ms: u64, now: u64) -> Boxed<'_, u64>;
   /// `key`'s next slot pushed back to `until_ms`, where it stood earlier.
   fn defer(&self, key: &str, until_ms: u64, now: u64) -> Boxed<'_, ()>;
   fn health(&self, engine: &str) -> Boxed<'_, Option<EngineHealth>>;
@@ -124,15 +124,12 @@ fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 impl Pacing for MemoryPacing {
-  fn reserve(&self, key: &str, interval_ms: u64, deadline_ms: u64, now: u64) -> Boxed<'_, Option<u64>> {
+  fn reserve(&self, key: &str, interval_ms: u64, now: u64) -> Boxed<'_, u64> {
     let mut next = locked(&self.next);
     let at = next.get(key).copied().unwrap_or(now).max(now);
-    let answer = (at <= deadline_ms).then(|| {
-      next.insert(key.to_owned(), at + interval_ms);
-      at
-    });
 
-    Box::pin(std::future::ready(Ok(answer)))
+    next.insert(key.to_owned(), at + interval_ms);
+    Box::pin(std::future::ready(Ok(at)))
   }
 
   fn defer(&self, key: &str, until_ms: u64, now: u64) -> Boxed<'_, ()> {
@@ -211,14 +208,14 @@ fn failed(why: sqlx::Error) -> String {
 }
 
 impl Pacing for StorePacing {
-  fn reserve(&self, key: &str, interval_ms: u64, deadline_ms: u64, now: u64) -> Boxed<'_, Option<u64>> {
+  fn reserve(&self, key: &str, interval_ms: u64, now: u64) -> Boxed<'_, u64> {
     let key = key.to_owned();
 
     Box::pin(async move {
       let mut store = self.open().await?;
 
-      // The row stands first, so the one statement after it takes the slot or leaves it: two processes
-      // asking at once are handed two slots, never the same one.
+      // The row stands first, so the one statement after it takes the slot: two processes asking at once are
+      // handed two slots, never the same one.
       sqlx::query(
         "INSERT INTO web_host_pacing (key, next_at, updated_at) VALUES ($1, 0, $2) ON CONFLICT (key) DO NOTHING",
       )
@@ -231,22 +228,19 @@ impl Pacing for StorePacing {
       let taken = sqlx::query(
         "UPDATE web_host_pacing \
          SET next_at = (CASE WHEN next_at > $2 THEN next_at ELSE $2 END) + $3, updated_at = $2 \
-         WHERE key = $1 AND (CASE WHEN next_at > $2 THEN next_at ELSE $2 END) <= $4 \
+         WHERE key = $1 \
          RETURNING next_at",
       )
       .bind(&key)
       .bind(whole(now))
       .bind(whole(interval_ms))
-      .bind(whole(deadline_ms))
-      .fetch_optional(&mut store)
+      .fetch_one(&mut store)
       .await
       .map_err(failed)?;
 
-      Ok(
-        taken
-          .and_then(|row| stored(&row, "next_at"))
-          .map(|next| next.saturating_sub(interval_ms)),
-      )
+      stored(&taken, "next_at")
+        .map(|next| next.saturating_sub(interval_ms))
+        .ok_or_else(|| format!("the pacing slot of {key} does not read"))
     })
   }
 
@@ -465,30 +459,18 @@ pub fn store_failure(why: String) -> WebError {
   WebError::new(format!("the web pacing store failed: {why}"), Failure::Transport)
 }
 
-/// Waits for `key`'s next slot under the deadline, and answers when it came; a slot that would come after
-/// the deadline is not waited for (docs/web-access.md, 「Pacing」).
+/// Waits for `key`'s next slot, however far off it falls, and answers when it came (docs/web-access.md,
+/// 「Pacing」).
 pub async fn wait_for_host(
   store: &dyn Pacing,
   key: &str,
   interval_ms: u64,
-  deadline_ms: u64,
   clock: &dyn Clock,
 ) -> WebResult<u64> {
-  let late = || {
-    WebError::new(format!("Host pacing for {key} would start after the web deadline"), Failure::Deadline)
-  };
-  let at = store
-    .reserve(key, interval_ms, deadline_ms, clock.now())
-    .await
-    .map_err(store_failure)?
-    .ok_or_else(late)?;
+  let at = store.reserve(key, interval_ms, clock.now()).await.map_err(store_failure)?;
   let now = clock.now();
 
   if at > now {
-    if at > deadline_ms {
-      return Err(late());
-    }
-
     clock.sleep(at - now).await;
   }
 

@@ -15,8 +15,6 @@ use crate::web::jar::Jar;
 use crate::web::pacing::{Pacing, wait_for_host};
 use crate::web::pdf::{is_pdf, pdf_text};
 
-pub const FETCH_TIMEOUT_MS: u64 = 25_000;
-
 // The slice a fetch returns, the length it cuts to and the answer it writes are the web's forms, shared with
 // the site contract.
 pub use crate::forms::fetch::MAX_FETCH_CHARS;
@@ -77,7 +75,6 @@ pub struct FetchPage {
   pub offset: Option<usize>,
   pub max_chars: Option<usize>,
   pub raw: bool,
-  pub deadline_ms: Option<u64>,
   /// Whether the real Chrome may read a page the direct client could not.
   pub browser_fallback: bool,
   /// Read the page in standard Chrome without a direct attempt first.
@@ -147,23 +144,21 @@ impl WebSession {
     }
   }
 
-  async fn wait_for_page_host(&self, url: &str, deadline_ms: u64) -> WebResult<()> {
+  async fn wait_for_page_host(&self, url: &str) -> WebResult<()> {
     let host = web_url(url).map(|url| host_of(&url)).unwrap_or_default();
 
     wait_for_host(
       &*self.parts.store,
       &format!("page:{host}"),
       self.parts.host_interval_ms,
-      deadline_ms,
       &*self.parts.check.clock,
     )
     .await?;
     Ok(())
   }
 
-  fn direct<'a>(&'a self, deadline_ms: u64) -> Direct<'a> {
-    let mut direct =
-      Direct::new(&*self.parts.store, &self.jar, deadline_ms, &self.parts.check, &*self.parts.transport);
+  fn direct(&self) -> Direct<'_> {
+    let mut direct = Direct::new(&*self.parts.store, &self.jar, &self.parts.check, &*self.parts.transport);
 
     direct.interval_ms = self.parts.host_interval_ms;
     direct
@@ -174,24 +169,23 @@ impl WebSession {
   pub async fn fetch_page(&self, url: &str, options: &FetchPage) -> WebResult<FetchSlice> {
     let target = raw_url_for(url);
     let clock = &self.parts.check.clock;
-    let deadline_ms = options.deadline_ms.unwrap_or(u64::MAX).min(clock.now() + FETCH_TIMEOUT_MS);
     let max_chars = options.max_chars.unwrap_or(DEFAULT_FETCH_CHARS);
 
     if options.browser_first && options.browser_fallback {
-      self.parts.check.resolve(&web_url(&target)?, Some(deadline_ms)).await?;
-      self.wait_for_page_host(&target, deadline_ms).await?;
+      self.parts.check.resolve(&web_url(&target)?).await?;
+      self.wait_for_page_host(&target).await?;
 
-      return Box::pin(self.rendered(&target, deadline_ms, options, None)).await;
+      return Box::pin(self.rendered(&target, options, None)).await;
     }
 
-    let fetched = self.direct(deadline_ms).bytes(&target).await?;
+    let fetched = self.direct().bytes(&target).await?;
 
     // A PDF is answered with its text, never with its bytes decoded as if they were text.
     if (200..300).contains(&fetched.status)
       && !fetched.bytes.is_empty()
       && is_pdf(&fetched.content_type, &fetched.bytes)
     {
-      return self.pdf_slice(&fetched, deadline_ms, options).await;
+      return self.pdf_slice(&fetched, options).await;
     }
 
     let body = decode(&fetched.bytes, &fetched.raw_content_type);
@@ -273,51 +267,29 @@ impl WebSession {
         .map_err(crate::web::pacing::store_failure)?;
     }
 
-    if let Err(error) =
-      wait_for_host(&*self.parts.store, &page_key, self.parts.host_interval_ms, deadline_ms, &**clock).await
-    {
-      if fetched.status == 429 && error.kind == Failure::Deadline {
-        return Err(
-          WebError::new(
-            format!(
-              "HTTP 429 at {}; Retry-After or host cooldown extends beyond the web deadline, so Chrome was not used to retry it",
-              fetched.url
-            ),
-            Failure::Blocked,
-          )
-          .at(Some(429), Some(&fetched.url)),
-        );
-      }
-
-      return Err(error);
-    }
+    // A site's own Retry-After is waited out, however long it is, before Chrome asks again.
+    wait_for_host(&*self.parts.store, &page_key, self.parts.host_interval_ms, &**clock).await?;
 
     // Chrome opens the address that was asked for and follows its redirects itself: a page that sent the
     // direct client to its login page may serve a browser the page itself. What it fails with says that
     // both roads were tried.
-    Box::pin(self.rendered(&target, deadline_ms, options, Some((reason, fetched.status))))
+    Box::pin(self.rendered(&target, options, Some((reason, fetched.status))))
       .await
       .map_err(WebError::after_chrome)
   }
 
   /// A page opened in the real Chrome and handed back as it rendered, unclassified: the road a search
   /// engine's recipe may send it by. `fresh` opens it in a Chrome of its own, ended once the page is read.
-  pub async fn render(
-    &self,
-    url: &str,
-    deadline_ms: u64,
-    fresh: bool,
-    options: FetchOptions,
-  ) -> WebResult<BrowserDocument> {
-    self.parts.check.resolve(&web_url(url)?, Some(deadline_ms)).await?;
-    self.wait_for_page_host(url, deadline_ms).await?;
+  pub async fn render(&self, url: &str, fresh: bool, options: FetchOptions) -> WebResult<BrowserDocument> {
+    self.parts.check.resolve(&web_url(url)?).await?;
+    self.wait_for_page_host(url).await?;
 
     if !fresh {
-      return self.browser().await.fetch(url.to_owned(), deadline_ms, options).await;
+      return self.browser().await.fetch(url.to_owned(), options).await;
     }
 
     let browser = self.own_browser();
-    let read = browser.fetch(url.to_owned(), deadline_ms, options).await;
+    let read = browser.fetch(url.to_owned(), options).await;
 
     browser.close().await;
     read
@@ -328,30 +300,26 @@ impl WebSession {
   async fn rendered(
     &self,
     url: &str,
-    deadline_ms: u64,
     options: &FetchPage,
     direct: Option<(String, u16)>,
   ) -> WebResult<FetchSlice> {
-    let rendered =
-      match self.browser().await.fetch(url.to_owned(), deadline_ms, FetchOptions::default()).await {
-        Ok(rendered) => rendered,
-        Err(error)
-          if matches!(error.kind, Failure::Blocked | Failure::UnsafeAddress | Failure::Deadline) =>
-        {
-          return Err(error);
-        }
-        Err(error) => {
-          let (first, status) = match &direct {
-            Some((reason, status)) => (format!("{reason}; standard Chrome fallback failed"), Some(*status)),
-            None => ("Browser-first fetch; standard Chrome failed".to_owned(), None),
-          };
+    let rendered = match self.browser().await.fetch(url.to_owned(), FetchOptions::default()).await {
+      Ok(rendered) => rendered,
+      Err(error) if matches!(error.kind, Failure::Blocked | Failure::UnsafeAddress) => {
+        return Err(error);
+      }
+      Err(error) => {
+        let (first, status) = match &direct {
+          Some((reason, status)) => (format!("{reason}; standard Chrome fallback failed"), Some(*status)),
+          None => ("Browser-first fetch; standard Chrome failed".to_owned(), None),
+        };
 
-          return Err(
-            WebError::new(format!("{first}: {}", error.message), Failure::BrowserUnavailable)
-              .at(status, Some(url)),
-          );
-        }
-      };
+        return Err(
+          WebError::new(format!("{first}: {}", error.message), Failure::BrowserUnavailable)
+            .at(status, Some(url)),
+        );
+      }
+    };
 
     // Chrome shows a PDF in its viewer, whose page holds no text: the file is the direct client's to read,
     // unless the direct client was what the site refused.
@@ -421,16 +389,8 @@ impl WebSession {
     )
   }
 
-  async fn pdf_slice(
-    &self,
-    fetched: &DirectBytes,
-    deadline_ms: u64,
-    options: &FetchPage,
-  ) -> WebResult<FetchSlice> {
-    let now = self.parts.check.clock.now();
-    let timeout = std::time::Duration::from_millis(FETCH_TIMEOUT_MS.min(deadline_ms.saturating_sub(now)));
-    let text =
-      pdf_text(&fetched.bytes, &fetched.url, timeout, fetched.truncated, options.pdf_layout).await?;
+  async fn pdf_slice(&self, fetched: &DirectBytes, options: &FetchPage) -> WebResult<FetchSlice> {
+    let text = pdf_text(&fetched.bytes, &fetched.url, fetched.truncated, options.pdf_layout).await?;
     let content_type = if fetched.content_type.is_empty() {
       "application/pdf"
     } else {

@@ -5,7 +5,6 @@
 
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
-use std::time::Duration;
 
 use bytes::Bytes;
 use futures_util::StreamExt;
@@ -14,7 +13,6 @@ use http::{HeaderMap, HeaderName, HeaderValue, Method};
 use url::Url;
 
 use crate::web::address::{Check, SafeTarget, host_of};
-use crate::web::clock::left;
 use crate::web::error::{Failure, WebError, WebResult};
 use crate::web::identity::{self, FetchSite, Identity};
 use crate::web::jar::Jar;
@@ -32,7 +30,6 @@ pub struct Outgoing {
   pub connect: Option<IpAddr>,
   pub headers: HeaderMap,
   pub body: Option<Vec<u8>>,
-  pub timeout: Duration,
 }
 
 /// What came back, its body still to be read.
@@ -50,15 +47,14 @@ pub trait Transport: Send + Sync {
 
 /// The network, through reqwest: one client per request, its redirects left to the caller and its name
 /// pinned to the address the check passed, so the name rides only in the Host header and the TLS server name
-/// the certificate is verified against.
+/// the certificate is verified against. A request has no timeout: it waits for its answer, and reqwest's own
+/// TCP keep-alive tells a peer that has gone away.
 pub struct Network;
 
 impl Transport for Network {
   fn send(&self, outgoing: Outgoing) -> crate::web::pacing::Boxed<'_, Incoming> {
     Box::pin(async move {
-      let mut builder = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .timeout(outgoing.timeout);
+      let mut builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none());
 
       if let (Some(address), Some(host)) = (outgoing.connect, outgoing.url.host_str()) {
         let port = outgoing.url.port_or_known_default().unwrap_or(443);
@@ -117,7 +113,6 @@ pub struct DirectDocument {
 pub struct Direct<'a> {
   pub store: &'a dyn Pacing,
   pub jar: &'a tokio::sync::Mutex<Jar>,
-  pub deadline_ms: u64,
   pub check: &'a Check,
   pub transport: &'a dyn Transport,
   pub interval_ms: u64,
@@ -131,14 +126,12 @@ impl<'a> Direct<'a> {
   pub fn new(
     store: &'a dyn Pacing,
     jar: &'a tokio::sync::Mutex<Jar>,
-    deadline_ms: u64,
     check: &'a Check,
     transport: &'a dyn Transport,
   ) -> Self {
     Self {
       store,
       jar,
-      deadline_ms,
       check,
       transport,
       interval_ms: DIRECT_HOST_INTERVAL_MS,
@@ -245,23 +238,16 @@ impl Direct<'_> {
     let clock = &*self.check.clock;
     let first = crate::web::address::web_url(value)?;
 
-    self.check.resolve(&first, Some(self.deadline_ms)).await?;
+    self.check.resolve(&first).await?;
 
     let mut current = first.clone();
     let mut previous: Option<Url> = None;
 
     for redirects in 0..=MAX_REDIRECTS {
-      let target: SafeTarget = self.check.resolve(&current, Some(self.deadline_ms)).await?;
+      let target: SafeTarget = self.check.resolve(&current).await?;
       let key = format!("page:{}", host_of(&current));
 
-      wait_for_host(self.store, &key, self.interval_ms, self.deadline_ms, clock).await?;
-
-      if clock.now() >= self.deadline_ms {
-        return Err(
-          WebError::new(format!("Web deadline reached before {current}"), Failure::Deadline)
-            .with_url(current.as_str()),
-        );
-      }
+      wait_for_host(self.store, &key, self.interval_ms, clock).await?;
 
       let site = fetch_site(&first, previous.as_ref(), &current);
       let mut headers = HeaderMap::new();
@@ -318,25 +304,11 @@ impl Direct<'_> {
         connect: if literal { None } else { target.address },
         headers,
         body: if redirects == 0 { body.clone() } else { None },
-        timeout: left(self.deadline_ms, clock.now()),
       };
-      let sent =
-        tokio::time::timeout(left(self.deadline_ms, clock.now()), self.transport.send(outgoing)).await;
-      let incoming = match sent {
-        Err(_) => {
-          return Err(
-            WebError::new(format!("Web deadline reached while reading {current}"), Failure::Deadline)
-              .with_url(current.as_str()),
-          );
-        }
-        Ok(Err(why)) => {
-          return Err(
-            WebError::new(format!("Web request failed for {current}: {why}"), Failure::Transport)
-              .with_url(current.as_str()),
-          );
-        }
-        Ok(Ok(incoming)) => incoming,
-      };
+      let incoming = self.transport.send(outgoing).await.map_err(|why| {
+        WebError::new(format!("Web request failed for {current}: {why}"), Failure::Transport)
+          .with_url(current.as_str())
+      })?;
       let set_cookies: Vec<String> = incoming
         .headers
         .get_all("set-cookie")
@@ -383,23 +355,10 @@ impl Direct<'_> {
         continue;
       }
 
-      let left_now = left(self.deadline_ms, clock.now());
-      let (bytes, truncated) =
-        match tokio::time::timeout(left_now, read_bounded(incoming.body, self.byte_cap)).await {
-          Err(_) => {
-            return Err(
-              WebError::new(format!("Web deadline reached while reading {current}"), Failure::Deadline)
-                .with_url(current.as_str()),
-            );
-          }
-          Ok(Err(why)) => {
-            return Err(
-              WebError::new(format!("Web request failed for {current}: {why}"), Failure::Transport)
-                .with_url(current.as_str()),
-            );
-          }
-          Ok(Ok(read)) => read,
-        };
+      let (bytes, truncated) = read_bounded(incoming.body, self.byte_cap).await.map_err(|why| {
+        WebError::new(format!("Web request failed for {current}: {why}"), Failure::Transport)
+          .with_url(current.as_str())
+      })?;
       let raw_content_type = incoming
         .headers
         .get("content-type")

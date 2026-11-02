@@ -13,8 +13,7 @@ use crate::web::pacing::Pacing;
 
 /// The most bytes a picture is read to.
 pub const IMAGE_BYTE_CAP: usize = 5 * 1024 * 1024;
-/// How long a picture may take to come.
-pub const PICTURE_TIMEOUT_MS: u64 = 10_000;
+
 /// Between two requests to one host.
 pub const PICTURE_HOST_INTERVAL_MS: u64 = 250;
 
@@ -39,7 +38,7 @@ pub async fn fetch_raster(
   transport: &dyn Transport,
 ) -> WebResult<RasterImage> {
   let jar = tokio::sync::Mutex::new(Jar::default());
-  let mut direct = Direct::new(store, &jar, check.clock.now() + PICTURE_TIMEOUT_MS, check, transport);
+  let mut direct = Direct::new(store, &jar, check, transport);
 
   direct.interval_ms = PICTURE_HOST_INTERVAL_MS;
   direct.byte_cap = IMAGE_BYTE_CAP;

@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use url::Url;
 
-use crate::web::clock::{Clock, left};
+use crate::web::clock::Clock;
 use crate::web::error::{Failure, WebError, WebResult};
 
 /// How a name is resolved: the system's resolver, or a test's own.
@@ -98,8 +98,8 @@ pub struct SafeTarget {
   pub address: Option<IpAddr>,
 }
 
-/// How an address is checked: against the deadline, by which resolver, and whether the private network is
-/// the caller's own trusted road.
+/// How an address is checked: by which resolver, on which clock the reads under it are paced, and whether the
+/// private network is the caller's own trusted road.
 #[derive(Clone)]
 pub struct Check {
   pub allow_private: bool,
@@ -137,16 +137,16 @@ impl Check {
   pub fn guard(&self) -> crate::web::chrome::UrlGuard {
     let check = self.clone();
 
-    Arc::new(move |url: String, deadline_ms: u64| {
+    Arc::new(move |url: String| {
       let check = check.clone();
 
-      Box::pin(async move { Ok(check.resolve(&web_url(&url)?, Some(deadline_ms)).await?.address) })
+      Box::pin(async move { Ok(check.resolve(&web_url(&url)?).await?.address) })
     })
   }
 
-  /// The URL checked: its scheme, its credentials and every address its name resolves to, inside the
-  /// deadline; the first address answers where the connection goes.
-  pub async fn resolve(&self, url: &Url, deadline_ms: Option<u64>) -> WebResult<SafeTarget> {
+  /// The URL checked: its scheme, its credentials and every address its name resolves to, the lookup waited
+  /// for until the resolver answers; the first address answers where the connection goes.
+  pub async fn resolve(&self, url: &Url) -> WebResult<SafeTarget> {
     let text = url.as_str();
 
     if url.scheme() != "http" && url.scheme() != "https" {
@@ -164,13 +164,6 @@ impl Check {
 
     let host = host_of(url);
 
-    if deadline_ms.is_some_and(|deadline| self.clock.now() >= deadline) {
-      return Err(
-        WebError::new(format!("Web deadline reached before resolving {host}"), Failure::Deadline)
-          .with_url(text),
-      );
-    }
-
     if self.allow_private {
       return Ok(SafeTarget {
         url: url.clone(),
@@ -187,26 +180,10 @@ impl Check {
 
     let addresses = match host.parse::<IpAddr>() {
       Ok(literal) => vec![literal],
-      Err(_) => {
-        let asked = self.lookup.lookup(&host);
-        let answered = match deadline_ms {
-          None => asked.await,
-          Some(deadline) => match tokio::time::timeout(left(deadline, self.clock.now()), asked).await {
-            Ok(answered) => answered,
-            Err(_) => {
-              return Err(
-                WebError::new(format!("Web deadline reached while resolving {host}"), Failure::Deadline)
-                  .with_url(text),
-              );
-            }
-          },
-        };
-
-        answered.map_err(|why| {
-          WebError::new(format!("Could not resolve web host {host}: {why}"), Failure::Transport)
-            .with_url(text)
-        })?
-      }
+      Err(_) => self.lookup.lookup(&host).await.map_err(|why| {
+        WebError::new(format!("Could not resolve web host {host}: {why}"), Failure::Transport)
+          .with_url(text)
+      })?,
     };
 
     if addresses.is_empty() || addresses.iter().copied().any(is_forbidden) {

@@ -49,17 +49,12 @@ fn a_manifest_breaking_a_rule_is_refused_with_why() {
 
   assert_eq!(refused(MANIFEST_TEXT, "other"), "its name `echo` is not its folder's, `other`");
   assert!(refused(&MANIFEST_TEXT.replace("protocol = 1", "protocol = 2"), "echo").contains("protocol 2"));
-  assert!(refused(&MANIFEST_TEXT.replace("timeout = 30\n", ""), "echo").contains("timeout"));
   assert!(refused(&MANIFEST_TEXT.replace("language", "speech"), "echo").contains("speech"));
   assert!(
     refused(&MANIFEST_TEXT.replace(r#"capabilities = ["graph.read"]"#, ""), "echo")
       .contains("asks for no capability")
   );
   assert!(refused(&MANIFEST_TEXT.replace("echo.json", "../echo.json"), "echo").contains("beside"));
-  assert!(
-    refused(&MANIFEST_TEXT.replace("hints =", "unbounded = true\ntimeout = 5\nhints ="), "echo")
-      .contains("unbounded and has a timeout")
-  );
   assert!(refused(&MANIFEST_TEXT.replace(r#""worker""#, r#""toolbook""#), "echo").contains("namespace"));
   assert_eq!(
     refused(&format!("{MANIFEST_TEXT}\n[helper]\ndescription = \"x\"\n"), "echo"),
@@ -69,6 +64,17 @@ fn a_manifest_breaking_a_rule_is_refused_with_why() {
     refused(&MANIFEST_TEXT.replace("timeout = 30\n", "timeout = 30\nafter_deploy = []\n"), "echo"),
     "its after-deploy command names nothing to run"
   );
+}
+
+// A manifest's `timeout` and an entry's `unbounded` are read and given no effect: a manifest reads with or
+// without them.
+#[test]
+fn a_timeout_and_unbounded_are_read_and_bound_nothing() {
+  let bare = MANIFEST_TEXT.replace("timeout = 30\n", "");
+  let both = MANIFEST_TEXT.replace("hints =", "unbounded = true\ntimeout = 5\nhints =");
+
+  assert!(Manifest::parse(&bare, "echo").unwrap().tool.timeout.is_none());
+  assert!(Manifest::parse(&both, "echo").unwrap().entries[0].unbounded);
 }
 
 #[test]

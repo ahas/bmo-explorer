@@ -6,7 +6,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::sync::watch;
 
-use crate::web_helper::run::{RESEARCH_CLOSED, Research, WebRun};
+use crate::web_helper::run::{Research, WebRun};
 
 // What every refusal and failure tells the run to do instead.
 const WRITE_ON: &str = "Write the result from what you already have.";
@@ -75,16 +75,16 @@ pub fn report(index: u32, text: &str, cut_off: bool) -> String {
   ];
 
   if cut_off {
-    lines.push(
-      "This branch was stopped when research closed; the notes above are as far as it got.".to_owned(),
-    );
+    lines
+      .push("This branch was stopped before it finished; the notes above are as far as it got.".to_owned());
   }
 
   lines.join("\n")
 }
 
 /// One branch asked for over the angle, answered once it has ended, or why it is not asked for: the record a
-/// branch's, the reading closing, no run, research unit or close named, no angle, research closed.
+/// branch's, the reading closing, no run or research unit named, no angle. A call whose caller lets go of it
+/// drops the request, which the research unit reads as letting go of the branch.
 pub async fn open(run: &WebRun, angle: &str) -> String {
   let research = &run.research;
   let branches = &run.branches;
@@ -98,17 +98,13 @@ pub async fn open(run: &WebRun, angle: &str) -> String {
     return refused(CLOSING);
   }
 
-  let (Some(id), Some(_), Some(at)) = (research.run, research.closes_at, branches_at(research)) else {
+  let (Some(id), Some(at)) = (research.run, branches_at(research)) else {
     return refused(NO_ALLOWANCE);
   };
   let angle = angle.trim();
 
   if angle.is_empty() {
     return refused(NO_ANGLE);
-  }
-
-  if run.guard.closed().is_some() {
-    return RESEARCH_CLOSED.to_owned();
   }
 
   let mut request = branches

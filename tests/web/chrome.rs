@@ -61,9 +61,10 @@ fn a_name_with_no_address_fails_only_its_own_request_unless_it_is_the_page_itsel
   assert!(fails_the_page(&refused, Some("Image"), Some("child"), Some("main")));
 }
 
-// Carried from packages/web/browser-fetch.test.ts: the address is watched until the page has arrived, and the wait ends at its bound
+// The address is watched until the page has arrived, and a page that has come to rest is read once more and
+// taken as it stands
 #[tokio::test]
-async fn the_address_is_watched_until_the_page_has_arrived_and_the_wait_ends_at_its_bound() {
+async fn the_address_is_watched_until_the_page_has_arrived_or_has_come_to_rest() {
   let clock = StandingClock::at(0);
   let turn = AtomicUsize::new(0);
   let arrived: Arrived = Arc::new(|url, title| url == "https://site.example/page" && title == "Page");
@@ -79,12 +80,37 @@ async fn the_address_is_watched_until_the_page_has_arrived_and_the_wait_ends_at_
     }
   };
 
-  assert!(await_arrival(read, &arrived, 10_000, &*clock).await);
+  assert!(await_arrival(read, &arrived, || false, &*clock).await);
   assert_eq!(clock.now(), 500);
 
+  // A check that stays where it is is watched for as long as the page does not rest, however long that is.
   let never: Arrived = Arc::new(|_, _| false);
-  let still = || async { Ok(("https://site.example/check".to_owned(), "Checking".to_owned())) };
+  let reads = AtomicUsize::new(0);
+  let still = || {
+    reads.fetch_add(1, Ordering::SeqCst);
+    async { Ok(("https://site.example/check".to_owned(), "Checking".to_owned())) }
+  };
+  let resting_from = clock.now() + 60_000;
 
-  assert!(!await_arrival(still, &never, 10_000, &*clock).await);
-  assert!(clock.now() <= 10_000);
+  assert!(!await_arrival(still, &never, || clock.now() >= resting_from, &*clock).await);
+  assert!(clock.now() >= resting_from);
+
+  // The read taken as the page came to rest is the last one, and a page that arrived just then is taken.
+  let looked = reads.load(Ordering::SeqCst);
+  let last_turn = AtomicUsize::new(0);
+  let arriving = || {
+    let at = last_turn.fetch_add(1, Ordering::SeqCst);
+
+    async move {
+      Ok(if at == 0 {
+        ("https://site.example/check".to_owned(), "Checking".to_owned())
+      } else {
+        ("https://site.example/page".to_owned(), "Page".to_owned())
+      })
+    }
+  };
+  let rested_at = clock.now() + 250;
+
+  assert!(looked > 1);
+  assert!(await_arrival(arriving, &arrived, || clock.now() >= rested_at, &*clock).await);
 }

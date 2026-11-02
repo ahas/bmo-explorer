@@ -67,8 +67,8 @@ pub enum WebAsked {
   Document { url: String, slice: Slice },
   /// A site tool's `head` road, answered with the road's result.
   Head { url: String },
-  /// Whether a site tool's call may read at all, answered with the refusal's text or null: research closed, or,
-  /// for a tool reading through the engines, searching stopped.
+  /// Whether a site tool's call may read at all, answered with the refusal's text or null: for a tool reading
+  /// through the engines, searching stopped; for any other, the page budget spent.
   Opening { engine: bool },
   /// How a site tool's call came out, answered with the tool result: an engine tool's answer counted as a
   /// search, and a failure answered as the reading answers a failed page.

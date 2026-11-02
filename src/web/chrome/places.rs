@@ -8,8 +8,7 @@ use std::os::fd::AsRawFd;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use crate::web::clock::now_ms;
-
+// How often a start that found every place taken looks again.
 const POLL: Duration = Duration::from_millis(250);
 
 /// The places' lock files: `BMO_CHROME_PLACES` of them, three where it names none, in
@@ -32,23 +31,32 @@ pub struct Place {
   _file: File,
 }
 
-fn take(path: &PathBuf) -> Option<Place> {
-  let file = OpenOptions::new().create(true).truncate(false).write(true).open(path).ok()?;
+// The place at `path` where it is free, none where another holds it, or why its lock file cannot be opened.
+fn take(path: &PathBuf) -> std::io::Result<Option<Place>> {
+  let file = OpenOptions::new().create(true).truncate(false).write(true).open(path)?;
   // SAFETY: an advisory lock on a file this process holds open.
   let taken = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0;
 
-  taken.then_some(Place { _file: file })
+  Ok(taken.then_some(Place { _file: file }))
 }
 
-/// The first free place, waited for until the deadline; none where every place stayed taken.
-pub async fn take_any(paths: &[PathBuf], until_ms: u64) -> Option<Place> {
+/// The first free place, waited for however long every place stays taken; why not, where no place's lock
+/// file can be opened at all.
+pub async fn take_any(paths: &[PathBuf]) -> Result<Place, String> {
   loop {
-    if let Some(place) = paths.iter().find_map(take) {
-      return Some(place);
+    let mut opened = false;
+    let mut refusal = None;
+
+    for path in paths {
+      match take(path) {
+        Ok(Some(place)) => return Ok(place),
+        Ok(None) => opened = true,
+        Err(why) => refusal = Some(format!("{}: {why}", path.display())),
+      }
     }
 
-    if now_ms() + POLL.as_millis() as u64 > until_ms {
-      return None;
+    if !opened {
+      return Err(refusal.unwrap_or_else(|| "this machine names no Chrome place".to_owned()));
     }
 
     tokio::time::sleep(POLL).await;

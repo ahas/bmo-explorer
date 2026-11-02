@@ -35,6 +35,7 @@ hyper = { version = "1.6.0", features = ["client", "http1"] }
 hyper-util = { version = "0.1.16", features = ["tokio"] }
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "gif", "webp", "tiff"] }
 libc = "0.2.177"
+libsqlite3-sys = { version = "0.30.1", default-features = false }
 oxc_allocator = "=0.153.0"
 oxc_ast = "=0.153.0"
 oxc_ast_visit = "=0.153.0"
@@ -94,6 +95,8 @@ hyper-util = { workspace = true, features = ["server", "http1"] }
 # A raster picture read and redrawn as JPEG to be looked at.
 image.workspace = true
 libc.workspace = true
+# The store's busy handler, on the SQLite sqlx itself links, so a statement waits for another process's lock.
+libsqlite3-sys.workspace = true
 # A script's values read by the JavaScript parser.
 oxc_allocator.workspace = true
 oxc_ast.workspace = true

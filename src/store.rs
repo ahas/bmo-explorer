@@ -2,6 +2,7 @@
 //! process of it opens, each call on a connection of its own. The tables are made as the store is opened, so a
 //! store that does not stand yet is made by its first reader.
 
+use std::ffi::{c_int, c_void};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -15,10 +16,18 @@ pub const FOLDER: &str = "explorer";
 /// The database's file in that folder.
 pub const FILE: &str = "explorer.db";
 
-/// How long a connection waits for another process's write before it fails. The journal stays in SQLite's own
-/// mode, where every lock a connection takes waits this long; changing the mode as a connection opens takes a
-/// lock that does not wait, and fails two processes opening the store at once.
-const BUSY_WAIT: Duration = Duration::from_secs(10);
+/// How often a statement that found the store locked by another process looks again. A statement waits for the
+/// lock however long the other holds it. The journal stays in SQLite's own mode, where every lock a connection
+/// takes goes through this wait; changing the mode as a connection opens takes a lock that does not wait, and
+/// fails two processes opening the store at once.
+const BUSY_POLL: Duration = Duration::from_millis(5);
+
+// SQLite's busy handler: asked again each time the lock is still held, it waits a moment and says to try again.
+// It runs on the connection's own worker thread, so the wait holds no other work up.
+extern "C" fn wait_for_lock(_: *mut c_void, _: c_int) -> c_int {
+  std::thread::sleep(BUSY_POLL);
+  1
+}
 
 /// Every table of the store, each made where it does not stand.
 const TABLES: &str = "
@@ -75,11 +84,25 @@ pub async fn open(place: &Path) -> Result<SqliteConnection, String> {
 
   let options = SqliteConnectOptions::from_str(&format!("sqlite://{}", place.display()))
     .map_err(|why| why.to_string())?
-    .create_if_missing(true)
-    .busy_timeout(BUSY_WAIT);
+    .create_if_missing(true);
   let mut connection = SqliteConnection::connect_with(&options)
     .await
     .map_err(|why| format!("the store at {} could not be opened: {why}", place.display()))?;
+  let mut handle = connection
+    .lock_handle()
+    .await
+    .map_err(|why| format!("the store at {} could not be opened: {why}", place.display()))?;
+
+  // SAFETY: the handle is this connection's own, held locked while the handler is set; the handler holds no
+  // state and lives as long as the program.
+  unsafe {
+    libsqlite3_sys::sqlite3_busy_handler(
+      handle.as_raw_handle().as_ptr(),
+      Some(wait_for_lock),
+      std::ptr::null_mut(),
+    );
+  }
+  drop(handle);
 
   connection
     .execute(TABLES)

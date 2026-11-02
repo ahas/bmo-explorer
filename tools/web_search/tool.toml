@@ -8,7 +8,6 @@ language = "rust"
 build = 'cargo build --release -p web-search-tool && cp "$BMO_CARGO_TARGET/release/web-search-tool" "$BMO_TOOL_OUT/"'
 check = 'cargo test --test tools'
 run = ["web-search-tool"]
-timeout = 300
 shared = ["web"]
 
 [[entry]]

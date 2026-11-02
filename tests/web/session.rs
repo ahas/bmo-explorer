@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use crate::testing::{FakeBrowser, Web, answer, check, pdf_of};
 use bmo_explorer::web::chrome::{Arrived, Link};
 use bmo_explorer::web::chrome::{BrowserDocument, BrowserFetcher, FetchOptions};
-use bmo_explorer::web::clock::StandingClock;
+use bmo_explorer::web::clock::{Clock, StandingClock};
 use bmo_explorer::web::error::Failure;
 use bmo_explorer::web::pacing::MemoryPacing;
 use bmo_explorer::web::session::*;
@@ -287,29 +287,20 @@ async fn a_204_is_a_no_content_line_and_chrome_never_starts() {
   assert_eq!(browser.calls(), 0);
 }
 
-// Carried from packages/web/web.test.ts: honors a page Retry-After that does not fit instead of retrying immediately in Chrome
+// A page's Retry-After is the site's own span: the read waits it out, however long, and then asks Chrome
 #[tokio::test]
-async fn a_retry_after_that_does_not_fit_is_honoured_rather_than_chrome_retried() {
+async fn a_page_s_retry_after_is_waited_out_before_chrome_asks_again() {
   let browser = FakeBrowser::new(rendered());
-  let web =
-    Arc::new(Web::default().route("fixture.test", |_| answer(429, &[("retry-after", "10")], b"slow down")));
-  let reading = session(web, browser.clone(), StandingClock::at(1_000));
-  let failed = reading
-    .fetch_page(
-      "https://fixture.test/",
-      &FetchPage {
-        deadline_ms: Some(3_000),
-        ..fallback()
-      },
-    )
-    .await
-    .unwrap_err();
-
-  assert_eq!(
-    (failed.kind, failed.status, failed.chrome_fallback),
-    (Failure::Blocked, Some(429), false)
+  let web = Arc::new(
+    Web::default().route("fixture.test", |_| answer(429, &[("retry-after", "3600")], b"slow down")),
   );
-  assert_eq!(browser.calls(), 0);
+  let clock = StandingClock::at(1_000);
+  let reading = session(web, browser.clone(), clock.clone());
+  let read = reading.fetch_page("https://fixture.test/", &fallback()).await.unwrap();
+
+  assert_eq!(read.provenance, "browser");
+  assert_eq!(browser.calls(), 1);
+  assert!(clock.now() >= 1_000 + 3_600_000);
 }
 
 // Carried from packages/web/web.test.ts: renders a page asked for fresh in a browser of its own and ends it, leaving the run's browser alone
@@ -329,16 +320,8 @@ async fn a_page_asked_for_fresh_is_rendered_in_a_browser_of_its_own_and_ended() 
       browser
     })),
   });
-  let deadline = 1_005_000;
-
-  reading
-    .render("https://fixture.test/app", deadline, true, FetchOptions::default())
-    .await
-    .unwrap();
-  reading
-    .render("https://fixture.test/app", deadline, true, FetchOptions::default())
-    .await
-    .unwrap();
+  reading.render("https://fixture.test/app", true, FetchOptions::default()).await.unwrap();
+  reading.render("https://fixture.test/app", true, FetchOptions::default()).await.unwrap();
   assert_eq!(
     started
       .lock()
@@ -352,13 +335,12 @@ async fn a_page_asked_for_fresh_is_rendered_in_a_browser_of_its_own_and_ended() 
   let arrived: Arrived = Arc::new(|url, _| !url.contains("/check"));
 
   reading
-    .render("https://fixture.test/app", deadline, false, FetchOptions::default())
+    .render("https://fixture.test/app", false, FetchOptions::default())
     .await
     .unwrap();
   reading
     .render(
       "https://fixture.test/app",
-      deadline,
       false,
       FetchOptions {
         arrived: Some(arrived),

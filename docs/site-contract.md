@@ -91,7 +91,7 @@
 ## What a tool is given
 
 - **It never opens a connection itself.** The record's web reading hands it its roads, so one
-  place holds the pacing, the deadline and the policy every outward request of this machine goes
+  place holds the pacing and the policy every outward request of this machine goes
   through (docs/web-access.md). A placed tool asks the record's web helper for each road on the
   helper's socket (「The web helper's socket」):
   - `page` — one public page or endpoint, fetched the way a browser would ask for it; a tool may
@@ -119,11 +119,11 @@
   (docs/web-access.md, 「Address checks」 and 「Pacing」). A `page` and a `head` keep their own request: the
   browser's name and language and the tool's own headers, with no cookies kept between them.
 - **The research guard stands round every call,** in the record's web reading:
-  - a call is refused as research has closed before its tool reads anything;
   - a tool that reads through the engines is held to the same refusals the plain web search is,
     and its answer counts as a search;
-  - a failure is answered as the reading answers a failed page, a read cut short by the research
-    close said as the close.
+  - a tool that reads no engine takes one page of the record's page budget, and is refused once the
+    budget is spent;
+  - a failure is answered as the reading answers a failed page.
 - **A tool's failed road is its own to say in its answer;** nothing of it is written down.
 
 ## The web helper's socket
@@ -132,6 +132,9 @@
   on the socket the tool host hands a call under `shared.web`. A line that does not read is answered as a
   failure: a tool result marked `isError`, its text opening `ERROR: the web helper was asked what it does
   not read`.
+- **The asker holds its connection open until it is answered,** its writing side included. An asker that
+  ends the connection first has let go of its request, and the helper drops the read under way for it with
+  everything it set off (docs/web-access.md, 「A read its caller lets go of」).
 - **Each request names its `kind`,** with the fields of its kind beside it:
 
 | `kind` | Its fields | Answered with |
@@ -151,7 +154,7 @@
 - **An arrival** is `check_paths` and `check_titles`, each a list that may be absent, `titled`, and
   `untitled_at`, a list of query name and value pairs that may be absent.
 - **A road's result** is `{"Ok": …}` with what the road gave, or `{"Err": …}` with the failure it met:
-  `message`, the sentence; `kind`, one of `blocked`, `deadline`, `unsafe_address`, `too_large`,
+  `message`, the sentence; `kind`, one of `blocked`, `unsafe_address`, `too_large`,
   `transport`, `http` and `browser_unavailable`; `status?`; `url?`; and `chrome_fallback`, true where the
   real Chrome, opened after the direct read failed, failed the page too. A helper out of reach fails the
   road as `browser_unavailable`, a program this machine needs that could not be had.

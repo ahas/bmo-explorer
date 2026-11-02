@@ -1,23 +1,21 @@
 use bmo_explorer::web::clock::{Clock, StandingClock};
-use bmo_explorer::web::error::Failure;
 use bmo_explorer::web::jar::StoredCookie;
 use bmo_explorer::web::pacing::*;
 
 #[tokio::test]
-async fn a_slot_is_waited_for_and_none_is_taken_past_the_deadline() {
+async fn a_slot_is_waited_for_however_far_off_it_falls() {
   let store = MemoryPacing::default();
   let clock = StandingClock::at(10_000);
 
-  assert_eq!(wait_for_host(&store, "page:a", 1_000, 20_000, &*clock).await.unwrap(), 10_000);
-  assert_eq!(wait_for_host(&store, "page:a", 1_000, 20_000, &*clock).await.unwrap(), 11_000);
+  assert_eq!(wait_for_host(&store, "page:a", 1_000, &*clock).await.unwrap(), 10_000);
+  assert_eq!(wait_for_host(&store, "page:a", 1_000, &*clock).await.unwrap(), 11_000);
   assert_eq!(clock.now(), 11_000);
 
-  store.defer("page:a", 50_000, clock.now()).await.unwrap();
-  assert_eq!(
-    wait_for_host(&store, "page:a", 1_000, 20_000, &*clock).await.unwrap_err().kind,
-    Failure::Deadline
-  );
-  assert_eq!(store.reserve("page:a", 1_000, 60_000, clock.now()).await.unwrap(), Some(50_000));
+  // A site's span pushed the host's next slot back: the request waits it out and is not turned away.
+  store.defer("page:a", 3_600_000, clock.now()).await.unwrap();
+  assert_eq!(wait_for_host(&store, "page:a", 1_000, &*clock).await.unwrap(), 3_600_000);
+  assert_eq!(clock.now(), 3_600_000);
+  assert_eq!(store.reserve("page:a", 1_000, clock.now()).await.unwrap(), 3_601_000);
 }
 
 #[tokio::test]

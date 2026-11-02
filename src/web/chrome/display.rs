@@ -7,12 +7,10 @@ use std::collections::BTreeMap;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::Duration;
 
 use tokio::io::AsyncReadExt;
 use tokio::process::{Child, Command};
 
-use crate::web::clock::now_ms;
 use crate::web::error::{Failure, WebError, WebResult};
 
 /// A display standing for one Chrome.
@@ -22,8 +20,6 @@ pub struct PrivateDisplay {
   pub runtime_dir: PathBuf,
   child: Child,
 }
-
-const STOP_WAIT: Duration = Duration::from_secs(3);
 
 /// The program that keeps a child bound to its parent's life: it dies with the process that started it.
 pub fn setpriv() -> String {
@@ -69,9 +65,9 @@ pub fn authority_entry(cookie: &[u8]) -> Vec<u8> {
 }
 
 impl PrivateDisplay {
-  /// The server started under `dir`, which the caller owns and removes. A server that has not named its
-  /// display by the deadline is stopped and reported unavailable.
-  pub async fn start(dir: &Path, deadline_ms: u64) -> WebResult<Self> {
+  /// The server started under `dir`, which the caller owns and removes, waited for until it names its display.
+  /// A server that ends its output without naming one is stopped and reported unavailable.
+  pub async fn start(dir: &Path) -> WebResult<Self> {
     let xvfb = std::env::var("BMO_XVFB_PATH").unwrap_or_else(|_| "/usr/bin/Xvfb".into());
     let setpriv = setpriv();
 
@@ -128,15 +124,9 @@ impl PrivateDisplay {
     let mut number: Option<String> = None;
 
     while number.is_none() {
-      let left = deadline_ms.saturating_sub(now_ms());
-
-      if left == 0 {
-        break;
-      }
-
       let mut chunk = [0_u8; 64];
-      let read = match tokio::time::timeout(Duration::from_millis(left), stdout.read(&mut chunk)).await {
-        Ok(Ok(read)) if read > 0 => read,
+      let read = match stdout.read(&mut chunk).await {
+        Ok(read) if read > 0 => read,
         _ => break,
       };
 
@@ -165,7 +155,7 @@ impl PrivateDisplay {
       None => {
         display.stop().await;
         Err(WebError::new(
-          "The private display did not start before the web deadline",
+          "The private display ended without naming its display",
           Failure::BrowserUnavailable,
         ))
       }
@@ -176,7 +166,7 @@ impl PrivateDisplay {
     self.child.id()
   }
 
-  /// The server ended: asked to, then made to.
+  /// The server asked to end, and waited for until it has: Xvfb ends on `SIGTERM`.
   pub async fn stop(&mut self) {
     if let Some(pid) = self.child.id() {
       // SAFETY: a signal sent to the server this display started and still holds.
@@ -185,8 +175,6 @@ impl PrivateDisplay {
       }
     }
 
-    if tokio::time::timeout(STOP_WAIT, self.child.wait()).await.is_err() {
-      let _ = self.child.kill().await;
-    }
+    let _ = self.child.wait().await;
   }
 }

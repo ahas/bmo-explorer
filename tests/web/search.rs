@@ -51,7 +51,6 @@ async fn ask(
       count: Some(30),
       language: None,
       category: Some(category),
-      deadline_ms: None,
       engine_interval_ms: None,
       engines: &[],
     },
@@ -212,7 +211,7 @@ async fn a_refusal_the_remedy_does_not_clear_rests_the_engine_and_the_next_block
 
   let opened = Arc::new(std::sync::Mutex::new(Vec::new()));
   let seen = opened.clone();
-  let render: Render = Arc::new(move |url: String, _| {
+  let render: Render = Arc::new(move |url: String| {
     seen.lock().unwrap().push(url.clone());
 
     let page = BrowserDocument {
@@ -353,7 +352,6 @@ async fn the_roster_of_each_category_is_asked_and_an_unknown_one_refused() {
       count: None,
       language: None,
       category: Some("maps"),
-      deadline_ms: None,
       engine_interval_ms: None,
       engines: &[],
     },

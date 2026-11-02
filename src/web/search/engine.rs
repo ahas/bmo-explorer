@@ -370,16 +370,14 @@ pub fn engine_key(engine: &dyn Engine) -> String {
 }
 
 /// The real browser an engine's recipe may send it by, where the caller has one to lend.
-pub type Render = Arc<
-  dyn Fn(String, u64) -> Pin<Box<dyn Future<Output = WebResult<BrowserDocument>> + Send>> + Send + Sync,
->;
+pub type Render =
+  Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = WebResult<BrowserDocument>> + Send>> + Send + Sync>;
 
 /// Everything an engine is asked through.
 pub struct EngineRoads<'a> {
   pub store: &'a dyn Pacing,
   /// The research run's engine gap; an engine whose recipe asks for more gets more.
   pub interval_ms: u64,
-  pub deadline_ms: u64,
   pub check: &'a Check,
   pub transport: &'a dyn Transport,
   pub render: Option<Render>,
@@ -402,10 +400,8 @@ pub enum Outcome {
   },
   Failed {
     reason: String,
-    timed_out: bool,
     elapsed_ms: u64,
   },
-  Late,
 }
 
 const ENGINE_BYTE_CAP: usize = 3_000_000;
@@ -440,19 +436,7 @@ pub async fn ask_engine(
     .await
     .hold(&store.cookies(engine.name(), clock.now()).await.map_err(store_failure)?, clock.now());
 
-  match wait_for_host(
-    store,
-    &engine_key(engine),
-    roads.interval_ms.max(recipe.interval_ms),
-    roads.deadline_ms,
-    clock,
-  )
-  .await
-  {
-    Ok(_) => {}
-    Err(error) if error.kind == Failure::Deadline => return Ok(Outcome::Late),
-    Err(error) => return Err(error),
-  }
+  wait_for_host(store, &engine_key(engine), roads.interval_ms.max(recipe.interval_ms), clock).await?;
 
   let started = clock.now();
   let elapsed = || clock.now().saturating_sub(started);
@@ -469,7 +453,7 @@ pub async fn ask_engine(
           Failure::BrowserUnavailable,
         ));
       };
-      let page = render(asked.clone(), roads.deadline_ms).await?;
+      let page = render(asked.clone()).await?;
 
       return Ok(EngineAnswer {
         requested_url: asked,
@@ -481,7 +465,7 @@ pub async fn ask_engine(
       });
     }
 
-    let mut direct = Direct::new(store, &jar, roads.deadline_ms, roads.check, roads.transport);
+    let mut direct = Direct::new(store, &jar, roads.check, roads.transport);
 
     direct.identity = identity::named(Some(&held.identity));
     direct.byte_cap = ENGINE_BYTE_CAP;
@@ -515,7 +499,6 @@ pub async fn ask_engine(
     if answer.status >= 400 {
       return Read::Done(Outcome::Failed {
         reason: format!("HTTP {}", answer.status),
-        timed_out: false,
         elapsed_ms: elapsed(),
       });
     }
@@ -527,14 +510,9 @@ pub async fn ask_engine(
       diagnosis: None,
     })
   };
-  let failure = |error: &WebError| {
-    let timed_out = error.kind == Failure::Deadline;
-
-    Outcome::Failed {
-      reason: if timed_out { "search deadline reached".into() } else { error.message.clone() },
-      timed_out,
-      elapsed_ms: elapsed(),
-    }
+  let failure = |error: &WebError| Outcome::Failed {
+    reason: error.message.clone(),
+    elapsed_ms: elapsed(),
   };
   let keep_cookies = async || -> WebResult<()> {
     let held = jar.lock().await.held(clock.now());
@@ -591,20 +569,8 @@ pub async fn ask_engine(
       .await
       .map_err(store_failure)?;
 
-    match wait_for_host(store, &engine_key(engine), recipe.interval_ms, roads.deadline_ms, clock).await {
-      Ok(_) => {}
-      Err(error) if error.kind == Failure::Deadline => {
-        keep_cookies().await?;
-        return Ok(Outcome::Refused {
-          diagnosis,
-          tried: Some(remedy),
-          after_browser: false,
-          retry_after_ms,
-          elapsed_ms: elapsed(),
-        });
-      }
-      Err(error) => return Err(error),
-    }
+    // The engine's own Retry-After is waited out, however long it is, before the one retry.
+    wait_for_host(store, &engine_key(engine), recipe.interval_ms, clock).await?;
   }
 
   let second = match attempt(&recipe).await {
