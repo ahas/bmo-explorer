@@ -7,7 +7,7 @@ name = "explorer"
 protocol = 1
 language = "rust"
 build = 'cargo build --release -p explorer-tool && cp "$BMO_CARGO_TARGET/release/explorer-tool" "$BMO_TOOL_OUT/"'
-check = 'cargo test --test tools'
+check = 'cargo test --test main tools::'
 run = ["explorer-tool"]
 
 [[entry]]

@@ -7,7 +7,7 @@ name = "web_fetch"
 protocol = 1
 language = "rust"
 build = 'cargo build --release -p web-fetch-tool && cp "$BMO_CARGO_TARGET/release/web-fetch-tool" "$BMO_TOOL_OUT/"'
-check = 'cargo test --test tools'
+check = 'cargo test --test main tools::'
 run = ["web-fetch-tool"]
 shared = ["web"]
 

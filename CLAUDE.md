@@ -36,7 +36,10 @@ for a research branch (`docs/api.md`, 「What this repository calls」).
   names. `tests/personal_data.rs` fails on each of those forms in any tracked file, naming the file, the line and
   the kind but never the value. `tests/repository.rs` reads the names from the list `BMO_NAMES_LIST` names,
   since no repository keeps such a list.
-- **Tests live in `tests/`.** No test module sits in `src/` or beside a tool's code.
+- **Tests live in `tests/`.** No test module sits in `src/` or beside a tool's code. The Rust tests are one test
+  target, the harness `tests/main.rs` named `main` (bmo-chat's `docs/conventions.md`, 「Rust builds」), each file
+  under `tests/` a module of it and an area's own modules in the folder of its name; one file's tests run as
+  `bmo-testbed cargo test --test main <module>::`.
 - **No directory named after its parent** (no `x/x`), and **only the Cargo manifest at the root.**
 - **Documents state what is true now:** no change history, no quoted source and no file-and-line pins.
 - **A general format is read by a maintained library,** never by a parser written here; a reading no library

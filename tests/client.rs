@@ -11,12 +11,7 @@ use bmo_explorer::web::clock::StandingClock;
 use bmo_explorer::web::pacing::MemoryPacing;
 use bmo_explorer::web::session::{SessionParts, WebSession};
 
-// The web layer's stand-ins, of which this target reads some.
-#[allow(dead_code)]
-#[path = "web/testing.rs"]
-mod testing;
-
-use testing::{FakeBrowser, Web, answer, check, html};
+use crate::web::testing::{FakeBrowser, Web, answer, check, html};
 
 // A page as the stand-in Chrome renders every address it is sent to.
 fn rendered() -> BrowserDocument {

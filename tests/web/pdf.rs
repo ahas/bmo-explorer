@@ -1,7 +1,7 @@
 use bmo_explorer::web::error::Failure;
 use bmo_explorer::web::pdf::*;
 
-use crate::testing::pdf_of;
+use super::testing::pdf_of;
 
 // Carried from packages/web/pdf-text.test.ts: knows a PDF by its type or, sent as anything else, by its signature
 #[test]

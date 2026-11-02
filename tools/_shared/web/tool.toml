@@ -7,7 +7,7 @@ name = "web"
 protocol = 1
 language = "rust"
 build = 'cargo build --release -p web-helper && cp "$BMO_CARGO_TARGET/release/web-helper" "$BMO_TOOL_OUT/"'
-check = 'cargo test --test web_helper'
+check = 'cargo test --test main web_helper::'
 run = ["web-helper"]
 
 [helper]

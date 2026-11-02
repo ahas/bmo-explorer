@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use crate::testing::{FakeBrowser, Web, answer, check, pdf_of};
+use super::testing::{FakeBrowser, Web, answer, check, pdf_of};
 use bmo_explorer::web::chrome::{Arrived, Link};
 use bmo_explorer::web::chrome::{BrowserDocument, BrowserFetcher, FetchOptions};
 use bmo_explorer::web::clock::{Clock, StandingClock};

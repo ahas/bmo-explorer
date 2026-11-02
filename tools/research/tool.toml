@@ -8,7 +8,7 @@ name = "research"
 protocol = 1
 language = "rust"
 build = 'cargo build --release -p research-tool && cp "$BMO_CARGO_TARGET/release/research-tool" "$BMO_TOOL_OUT/"'
-check = 'cargo test --test tools'
+check = 'cargo test --test main tools::'
 run = ["research-tool"]
 shared = ["web"]
 

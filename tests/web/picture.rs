@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use crate::testing::{Web, answer, check};
+use super::testing::{Web, answer, check};
 use bmo_explorer::web::clock::StandingClock;
 use bmo_explorer::web::pacing::MemoryPacing;
 use bmo_explorer::web::picture::*;

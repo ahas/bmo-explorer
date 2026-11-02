@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crate::testing::{Web, answer, check, fixture, html};
+use super::testing::{Web, answer, check, fixture, html};
 use bmo_explorer::web::chrome::BrowserDocument;
 use bmo_explorer::web::clock::{Clock, StandingClock};
 use bmo_explorer::web::pacing::{MemoryPacing, Pacing, Route as RecipeRoute};
@@ -106,7 +106,7 @@ async fn each_engine_is_asked_at_its_own_page_the_korean_native_ones_first() {
 }
 
 fn news_web(
-  naver: impl Fn(&crate::testing::Asked) -> crate::testing::Answer + Send + Sync + 'static,
+  naver: impl Fn(&super::testing::Asked) -> super::testing::Answer + Send + Sync + 'static,
   bing: String,
 ) -> Web {
   let daum = engines_fixture("daum-news.html");
@@ -128,7 +128,7 @@ async fn a_refusal_the_remedy_clears_is_written_down_and_kept() {
   let web = news_web(
     move |asked| {
       if asked.user_agent.contains("X11; Linux") {
-        crate::testing::answer(418, &[("content-type", "text/html; charset=utf-8")], limit.as_bytes())
+        super::testing::answer(418, &[("content-type", "text/html; charset=utf-8")], limit.as_bytes())
       } else {
         html(&news)
       }
@@ -178,7 +178,7 @@ async fn a_refusal_the_remedy_does_not_clear_rests_the_engine_and_the_next_block
   let limit = engines_fixture("naver-shopping-limit.html");
   let news = engines_fixture("naver-news.html");
   let web = news_web(
-    move |_| crate::testing::answer(418, &[("content-type", "text/html; charset=utf-8")], limit.as_bytes()),
+    move |_| super::testing::answer(418, &[("content-type", "text/html; charset=utf-8")], limit.as_bytes()),
     "<rss><channel></channel></rss>".into(),
   );
   let store = MemoryPacing::default();
