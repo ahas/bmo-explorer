@@ -22,6 +22,45 @@ pub struct SearchResults {
   pub health: Vec<EngineHealth>,
 }
 
+/// The licence an image engine states for one picture: its own id, the address it gives for the licence, and
+/// the attribution line it states; each the source's own words, none where it states none.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ImageLicence {
+  pub id: String,
+  pub url: Option<String>,
+  pub attribution: Option<String>,
+}
+
+/// One picture as an image engine answered it: the fields the drawing pipeline keeps, each the engine's own
+/// statement or none. Nothing here is inferred from how a page looks.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ImageHit {
+  /// The direct image address.
+  pub url: String,
+  /// The page the picture stands on; null where the engine names none.
+  pub page_url: Option<String>,
+  pub title: String,
+  pub creator: Option<String>,
+  pub publisher: Option<String>,
+  pub width: Option<u32>,
+  pub height: Option<u32>,
+  pub media_type: Option<String>,
+  /// The licence the engine states for this picture; null where it states none.
+  pub licence: Option<ImageLicence>,
+  /// The engine that answered it.
+  pub engine: String,
+}
+
+/// A picture search's answer: the pictures mixed one from each engine in turn, and the engines that refused,
+/// the ones that answered off the query and their health.
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ImageResults {
+  pub images: Vec<ImageHit>,
+  pub unresponsive: Vec<String>,
+  pub off_topic: Vec<String>,
+  pub health: Vec<EngineHealth>,
+}
+
 pub const DEFAULT_SEARCH_COUNT: usize = 10;
 pub const MAX_SEARCH_COUNT: usize = 30;
 

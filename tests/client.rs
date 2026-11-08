@@ -5,13 +5,13 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use base64::Engine;
-use bmo_explorer::client::{Explorer, RasterInput, WebSearchInput};
+use bmo_explorer::client::{Explorer, ImageSearchInput, RasterInput, WebSearchInput};
 use bmo_explorer::web::chrome::{BrowserDocument, BrowserFetcher};
 use bmo_explorer::web::clock::StandingClock;
 use bmo_explorer::web::pacing::MemoryPacing;
 use bmo_explorer::web::session::{SessionParts, WebSession};
 
-use crate::web::testing::{FakeBrowser, Web, answer, check, html};
+use crate::web::testing::{FakeBrowser, Web, answer, check, fixture, html};
 
 // A page as the stand-in Chrome renders every address it is sent to.
 fn rendered() -> BrowserDocument {
@@ -174,4 +174,38 @@ async fn a_search_asks_only_the_engines_it_names_and_refuses_a_name_no_roster_ho
   );
   assert!(!web.asked().is_empty() && web.asked().iter().all(|asked| asked.host.contains("github")));
   assert_eq!((unknown.code.as_str(), empty.code.as_str()), ("bad-request", "bad-request"));
+}
+
+#[tokio::test]
+async fn an_image_search_asks_only_image_engines_and_answers_their_fields() {
+  let openverse = fixture("engines/openverse.json");
+  let (client, web, _) = client(Web::default().route("api.openverse.org", move |_| {
+    answer(200, &[("content-type", "application/json")], openverse.as_bytes())
+  }));
+  let asked = |engines: &[&str]| ImageSearchInput {
+    q: "cherry".into(),
+    engines: engines.iter().map(|name| (*name).to_owned()).collect(),
+    ..ImageSearchInput::default()
+  };
+  let found = client.search_images(&asked(&["openverse"])).await.unwrap();
+  let general = client.search_images(&asked(&["general"])).await.unwrap_err();
+  let unknown = client.search_images(&asked(&["altavista"])).await.unwrap_err();
+  let empty = client
+    .search_images(&ImageSearchInput {
+      q: "  ".into(),
+      ..ImageSearchInput::default()
+    })
+    .await
+    .unwrap_err();
+
+  assert_eq!(found.images.len(), 2);
+  assert_eq!(found.images[0].engine, "openverse");
+  assert_eq!(found.images[0].licence.as_ref().unwrap().id, "CC-BY-NC-2.0");
+  assert_eq!((found.images[0].width, found.images[0].height), (Some(500), Some(375)));
+  assert!(found.images[0].media_type.is_none());
+  assert!(web.asked().iter().all(|one| one.host == "api.openverse.org"));
+  assert_eq!(
+    (general.code.as_str(), unknown.code.as_str(), empty.code.as_str()),
+    ("bad-request", "bad-request", "bad-request")
+  );
 }

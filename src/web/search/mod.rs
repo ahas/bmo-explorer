@@ -13,12 +13,13 @@ use crate::web::address::Check;
 use crate::web::client::Transport;
 use crate::web::error::{Failure, WebError, WebResult};
 use crate::web::pacing::{EngineHealth, EngineState, Pacing, store_failure};
-use engine::{Engine, EngineQuery, EngineRoads, Outcome, Render, ask_engine, rest_ms};
+use engine::{Asked, Engine, EngineQuery, EngineRoads, Found, Outcome, Render, ask_engine, rest_ms};
 
 // The answer a search hands on, its counts and its rendering stand in the web's forms crate, below this layer
 // and the site contract, so a site tool reading through the engines answers as the search does.
 pub use crate::forms::search::{
-  DEFAULT_SEARCH_COUNT, MAX_SEARCH_COUNT, SearchHit, SearchResults, render_search_results,
+  DEFAULT_SEARCH_COUNT, ImageHit, ImageLicence, ImageResults, MAX_SEARCH_COUNT, SearchHit, SearchResults,
+  render_search_results,
 };
 pub const SEARCH_ENGINE_INTERVAL_MS: u64 = 2_000;
 
@@ -47,6 +48,47 @@ pub fn engines_for(category: &str) -> Vec<&'static dyn Engine> {
     .copied()
     .filter(|one| engine::declared(one.name()).category == category)
     .collect()
+}
+
+/// The image engines this build asks, in roster order.
+pub fn image_engine_names() -> Vec<&'static str> {
+  ENGINES
+    .iter()
+    .filter(|engine| engine.image_source())
+    .map(|engine| engine.name())
+    .collect()
+}
+
+/// The image engines a search names, in roster order: an engine by its roster name, a category by every image
+/// engine of it, and none for every image engine; or the name that is no image engine's and no category
+/// holding one.
+pub fn image_engines_named(asked: &[String]) -> Result<Vec<&'static str>, String> {
+  let image = image_engine_names();
+
+  if asked.is_empty() {
+    return Ok(image);
+  }
+
+  let mut wanted: Vec<&'static str> = Vec::new();
+
+  for name in asked.iter().map(|name| name.trim()) {
+    let standing: Vec<&'static str> = image
+      .iter()
+      .copied()
+      .filter(|engine| *engine == name || engine::declared(engine).category == name)
+      .collect();
+
+    if standing.is_empty() {
+      return Err(format!(
+        "No image engine or category is named {name:?}; the image engines are {}.",
+        image.join(", ")
+      ));
+    }
+
+    wanted.extend(standing);
+  }
+
+  Ok(image.into_iter().filter(|engine| wanted.contains(engine)).collect())
 }
 
 /// One search asked.
@@ -97,16 +139,22 @@ pub fn search_terms(query: &str) -> Vec<String> {
 /// Whether an engine answered something other than what it was asked: fewer than half the query's terms
 /// carried anywhere in its answer, over a query of two terms and more. The words that decided it, or nothing.
 pub fn off_topic_answer(query: &str, hits: &[SearchHit]) -> Option<String> {
+  let haystacks: Vec<String> =
+    hits.iter().map(|hit| format!("{} {} {}", hit.title, hit.url, hit.snippet)).collect();
+
+  off_topic_terms(query, &haystacks)
+}
+
+/// Whether an answer carrying these lines is off the query, by the terms it carries. The words that decided
+/// it, or nothing.
+fn off_topic_terms(query: &str, haystacks: &[String]) -> Option<String> {
   let terms = search_terms(query);
 
-  if terms.len() < 2 || hits.is_empty() {
+  if terms.len() < 2 || haystacks.is_empty() {
     return None;
   }
 
-  let haystacks: Vec<String> = hits
-    .iter()
-    .map(|hit| format!("{} {} {}", hit.title, hit.url, hit.snippet).to_lowercase())
-    .collect();
+  let haystacks: Vec<String> = haystacks.iter().map(|text| text.to_lowercase()).collect();
   let carried = terms
     .iter()
     .filter(|term| haystacks.iter().any(|text| text.contains(term.as_str())))
@@ -115,7 +163,7 @@ pub fn off_topic_answer(query: &str, hits: &[SearchHit]) -> Option<String> {
   (carried * 2 < terms.len()).then(|| {
     format!(
       "answered {} results carrying {carried} of the query's {} terms",
-      hits.len(),
+      haystacks.len(),
       terms.len()
     )
   })
@@ -144,23 +192,32 @@ pub fn asking_order<T: Copy>(engines: &[T], korean_native: impl Fn(T) -> bool, l
 /// One hit from each answering engine in turn, so one engine's first page never pushes every other engine's
 /// answer past the count.
 pub fn interleave_hits(answered: &[Vec<SearchHit>], count: usize) -> Vec<SearchHit> {
-  let mut hits = Vec::new();
+  interleave(answered, count, |hit| hit.url.as_str())
+}
+
+/// The pictures of every answering engine, one from each in turn, deduplicated by their direct address.
+pub fn interleave_images(answered: &[Vec<ImageHit>], count: usize) -> Vec<ImageHit> {
+  interleave(answered, count, |image| image.url.as_str())
+}
+
+fn interleave<T: Clone>(answered: &[Vec<T>], count: usize, address: impl Fn(&T) -> &str) -> Vec<T> {
+  let mut found = Vec::new();
   let mut seen = HashSet::new();
   let mut rank = 0;
 
-  while hits.len() < count && answered.iter().any(|list| rank < list.len()) {
+  while found.len() < count && answered.iter().any(|list| rank < list.len()) {
     for list in answered {
       let Some(one) = list.get(rank) else {
         continue;
       };
 
-      if !seen.insert(one.url.clone()) {
+      if !seen.insert(address(one).to_owned()) {
         continue;
       }
 
-      hits.push(one.clone());
+      found.push(one.clone());
 
-      if hits.len() == count {
+      if found.len() == count {
         break;
       }
     }
@@ -168,7 +225,7 @@ pub fn interleave_hits(answered: &[Vec<SearchHit>], count: usize) -> Vec<SearchH
     rank += 1;
   }
 
-  hits
+  found
 }
 
 async fn observed(store: &dyn Pacing, health: EngineHealth) -> WebResult<EngineHealth> {
@@ -189,24 +246,85 @@ fn iso(ms: u64) -> String {
 
 /// One search: every engine of the category asked, and what came of each.
 pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResult<SearchResults> {
-  let clock = &*roads.check.clock;
   let count = search.count.unwrap_or(DEFAULT_SEARCH_COUNT).clamp(1, MAX_SEARCH_COUNT);
   let category = search
     .category
     .map(str::trim)
     .filter(|category| !category.is_empty())
     .unwrap_or("general");
-  let language = search_language(search.query, search.language);
-  let roster = if search.engines.is_empty() {
-    engines_for(category)
-  } else {
-    ENGINES.iter().copied().filter(|one| search.engines.contains(&one.name())).collect()
-  };
+  let roster = roster_for(search, category);
 
   if roster.is_empty() {
     return Err(WebError::new(format!("Unsupported search category: {category}"), Failure::Transport));
   }
 
+  let all = ask_all(roster, search, roads, Asked::Text).await?;
+
+  Ok(SearchResults {
+    hits: interleave_hits(&all.text, count),
+    unresponsive: all.unresponsive,
+    off_topic: all.off_topic,
+    health: all.health,
+  })
+}
+
+/// One picture search: every image engine asked, each picture answered as the fields its source states.
+pub async fn search_images(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResult<ImageResults> {
+  let count = search.count.unwrap_or(DEFAULT_SEARCH_COUNT).clamp(1, MAX_SEARCH_COUNT);
+  let category = search
+    .category
+    .map(str::trim)
+    .filter(|category| !category.is_empty())
+    .unwrap_or("images");
+  let roster: Vec<&'static dyn Engine> = roster_for(search, category)
+    .into_iter()
+    .filter(|engine| engine.image_source())
+    .collect();
+
+  if roster.is_empty() {
+    return Err(WebError::new(
+      format!("Unsupported image search: {category} names no image engine"),
+      Failure::Transport,
+    ));
+  }
+
+  let all = ask_all(roster, search, roads, Asked::Images).await?;
+
+  Ok(ImageResults {
+    images: interleave_images(&all.images, count),
+    unresponsive: all.unresponsive,
+    off_topic: all.off_topic,
+    health: all.health,
+  })
+}
+
+/// The engines a search asks, in roster order: the category's, or the ones it names.
+fn roster_for(search: &Search<'_>, category: &str) -> Vec<&'static dyn Engine> {
+  if search.engines.is_empty() {
+    engines_for(category)
+  } else {
+    ENGINES.iter().copied().filter(|one| search.engines.contains(&one.name())).collect()
+  }
+}
+
+#[derive(Default)]
+struct AskAll {
+  text: Vec<Vec<SearchHit>>,
+  images: Vec<Vec<ImageHit>>,
+  unresponsive: Vec<String>,
+  off_topic: Vec<String>,
+  health: Vec<EngineHealth>,
+}
+
+/// Every engine of the roster asked for what the search wants, and what came of each.
+async fn ask_all(
+  roster: Vec<&'static dyn Engine>,
+  search: &Search<'_>,
+  roads: &SearchRoads<'_>,
+  asked: Asked,
+) -> WebResult<AskAll> {
+  let clock = &*roads.check.clock;
+  let language = search_language(search.query, search.language);
   let engine_roads = EngineRoads {
     store: roads.store,
     interval_ms: search.engine_interval_ms.unwrap_or(SEARCH_ENGINE_INTERVAL_MS),
@@ -214,10 +332,7 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
     transport: roads.transport,
     render: roads.render.clone(),
   };
-  let mut answered: Vec<Vec<SearchHit>> = Vec::new();
-  let mut unresponsive: Vec<String> = Vec::new();
-  let mut off_topic: Vec<String> = Vec::new();
-  let mut health: Vec<EngineHealth> = Vec::new();
+  let mut all = AskAll::default();
   let health_of =
     |engine: &str, state, reason: Option<String>, elapsed_ms, result_count, suspended_until| EngineHealth {
       engine: engine.to_owned(),
@@ -241,12 +356,12 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
     if prior.state == EngineState::Suspended
       && let Some(until) = prior.suspended_until.filter(|until| *until > clock.now())
     {
-      unresponsive.push(format!(
+      all.unresponsive.push(format!(
         "{name} (resting until {} after {})",
         iso(until),
         prior.reason.as_deref().unwrap_or("a failure")
       ));
-      health.push(prior);
+      all.health.push(prior);
       continue;
     }
 
@@ -256,7 +371,7 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
       count: MAX_SEARCH_COUNT,
     };
 
-    match ask_engine(engine, &query, &engine_roads).await? {
+    match ask_engine(engine, &query, &engine_roads, asked).await? {
       Outcome::Failed { reason, elapsed_ms } => {
         // A failure of the ordinary kind rests the engine briefly.
         let seen = health_of(
@@ -268,8 +383,8 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
           Some(clock.now() + rest_ms(None, false)),
         );
 
-        health.push(observed(roads.store, seen).await?);
-        unresponsive.push(format!("{name} ({reason})"));
+        all.health.push(observed(roads.store, seen).await?);
+        all.unresponsive.push(format!("{name} ({reason})"));
       }
       Outcome::Refused {
         diagnosis,
@@ -287,7 +402,7 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
         let until =
           clock.now() + rest_ms(Some(diagnosis.cause), after_browser).max(retry_after_ms.unwrap_or(0));
 
-        health.push(
+        all.health.push(
           observed(
             roads.store,
             health_of(
@@ -301,28 +416,71 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
           )
           .await?,
         );
-        unresponsive.push(format!("{name} ({reason})"));
+        all.unresponsive.push(format!("{name} ({reason})"));
       }
       Outcome::Answered {
-        hits,
+        found,
         elapsed_ms,
         remedy,
         diagnosis,
       } => {
-        let found: Vec<SearchHit> = hits
-          .into_iter()
-          .map(|hit| SearchHit {
-            title: hit.title,
-            url: hit.url,
-            snippet: hit.snippet,
-            engine: name.to_owned(),
-          })
-          .collect();
+        let (carried, text, images) = match found {
+          Found::Text(hits) => {
+            let found: Vec<SearchHit> = hits
+              .into_iter()
+              .map(|hit| SearchHit {
+                title: hit.title,
+                url: hit.url,
+                snippet: hit.snippet,
+                engine: name.to_owned(),
+              })
+              .collect();
+            let carried: Vec<String> =
+              found.iter().map(|hit| format!("{} {} {}", hit.title, hit.url, hit.snippet)).collect();
+
+            (carried, Some(found), None)
+          }
+          Found::Images(images) => {
+            let found: Vec<ImageHit> = images
+              .into_iter()
+              .map(|image| ImageHit {
+                url: image.url,
+                page_url: image.page_url,
+                title: image.title,
+                creator: image.creator,
+                publisher: image.publisher,
+                width: image.width,
+                height: image.height,
+                media_type: image.media_type,
+                licence: image.licence.map(|licence| ImageLicence {
+                  id: licence.id,
+                  url: licence.url,
+                  attribution: licence.attribution,
+                }),
+                engine: name.to_owned(),
+              })
+              .collect();
+            let carried: Vec<String> = found
+              .iter()
+              .map(|image| {
+                format!(
+                  "{} {} {} {}",
+                  image.title,
+                  image.url,
+                  image.page_url.as_deref().unwrap_or(""),
+                  image.creator.as_deref().unwrap_or("")
+                )
+              })
+              .collect();
+
+            (carried, None, Some(found))
+          }
+        };
 
         // An engine answering something other than what it was asked is kept out of the merged list: its pages
         // are not partial results, they are another query's.
-        if let Some(wandered) = off_topic_answer(search.query, &found) {
-          health.push(
+        if let Some(wandered) = off_topic_terms(search.query, &carried) {
+          all.health.push(
             observed(
               roads.store,
               health_of(
@@ -330,13 +488,13 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
                 EngineState::Degraded,
                 Some(wandered.clone()),
                 Some(elapsed_ms),
-                Some(found.len() as u64),
+                Some(carried.len() as u64),
                 None,
               ),
             )
             .await?,
           );
-          off_topic.push(format!("{name} ({wandered})"));
+          all.off_topic.push(format!("{name} ({wandered})"));
           continue;
         }
 
@@ -347,7 +505,7 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
           _ => None,
         };
 
-        health.push(
+        all.health.push(
           observed(
             roads.store,
             health_of(
@@ -355,29 +513,31 @@ pub async fn search_web(search: &Search<'_>, roads: &SearchRoads<'_>) -> WebResu
               EngineState::Healthy,
               cleared,
               Some(elapsed_ms),
-              Some(found.len() as u64),
+              Some(carried.len() as u64),
               None,
             ),
           )
           .await?,
         );
-        answered.push(found);
+
+        if let Some(hits) = text {
+          all.text.push(hits);
+        }
+
+        if let Some(hits) = images {
+          all.images.push(hits);
+        }
       }
     }
   }
 
   let mut seen = HashSet::new();
 
-  unresponsive.retain(|one| seen.insert(one.clone()));
+  all.unresponsive.retain(|one| seen.insert(one.clone()));
   seen.clear();
-  off_topic.retain(|one| seen.insert(one.clone()));
+  all.off_topic.retain(|one| seen.insert(one.clone()));
 
-  Ok(SearchResults {
-    hits: interleave_hits(&answered, count),
-    unresponsive,
-    off_topic,
-    health,
-  })
+  Ok(all)
 }
 
 /// The render road a search lends its engines, out of a session.

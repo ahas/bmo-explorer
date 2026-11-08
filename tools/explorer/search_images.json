@@ -1,0 +1,44 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "engines": {
+      "default": [],
+      "description": "The image engines to ask: each an engine's roster name or a category standing for its image engines;\nnone for every image engine.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "language": {
+      "default": null,
+      "description": "The language the query is written in, such as \"ko\" or \"en\"; any where absent.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "limit": {
+      "default": null,
+      "description": "How many pictures to answer, 1 to 30; 10 where absent.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "pacing": {
+      "description": "Whose requests are paced together: one name for each run's reading.",
+      "type": "string"
+    },
+    "q": {
+      "description": "The query.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "q",
+    "pacing"
+  ],
+  "type": "object"
+}

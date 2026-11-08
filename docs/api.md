@@ -1,11 +1,11 @@
 # The boundary
 
 bmo-explorer is web reading as an upstream: the search engines asked directly, a page read as words, a link's
-preview, a page's markup as served, the picture at an address, and the engines' standing. It serves no HTTP of
-its own: its tools are its contract, served by its MCP server and placed with a tool host, and the client behind
-them is the Rust library of this repository. The one service it calls is the session service a research record
-names, for a research branch (「What this repository calls」). This document is the whole of what it serves;
-another repository reaches it through nothing else.
+preview, a page's markup as served, the picture at an address, the engines' standing, and a picture search whose
+hits carry their licence fields. It serves no HTTP of its own: its tools are its contract, served by its MCP
+server and placed with a tool host, and the client behind them is the Rust library of this repository. The one
+service it calls is the session service a research record names, for a research branch (「What this repository
+calls」). This document is the whole of what it serves; another repository reaches it through nothing else.
 
 ```mermaid
 flowchart TD
@@ -39,7 +39,7 @@ flowchart TD
 ## The contract
 
 - **`docs/openapi.json` is the contract,** an OpenAPI 3.1 document written from the client's own types: no
-  paths, the common schemas (`Error`, `Health`, `Event`, `EventPage`), the plugin under `x-harness`, the six
+  paths, the common schemas (`Error`, `Health`, `Event`, `EventPage`), the plugin under `x-harness`, the seven
   tools under `x-tools` with their input and output schemas and the client function each calls, and
   `x-calls` empty. A test fails where the committed document differs from what the code writes;
   `bmo-explorer openapi` prints it.
@@ -48,7 +48,7 @@ flowchart TD
 
 ## The client
 
-- **The client is this crate's `client` module,** the one place the six operations are done. It is opened over
+- **The client is this crate's `client` module,** the one place the seven operations are done. It is opened over
   a data root and holds one web reading, its own direct client, Chrome and cookie stores, until it is closed
   (docs/web-access.md, 「One session, one investigation」).
 - **A failure is the wire format's error:**
@@ -67,21 +67,32 @@ flowchart TD
 
 ## The MCP server
 
-- **`bmo-explorer mcp`** serves the six tools on standard input and output to a harness that starts it, over
+- **`bmo-explorer mcp`** serves the seven tools on standard input and output to a harness that starts it, over
   the data root the command names. Its instructions say what a harness does first: search with
-  `explorer_web_search` and read a hit with `explorer_web_fetch`.
+  `explorer_web_search` and read a hit with `explorer_web_fetch`; find pictures with `explorer_search_images`
+  and read one with `explorer_fetch_raster`.
 - **Each tool is a thin call of one client function,** answered as structured content. A failure is a tool
   result marked `isError` whose text is the error as JSON, `code` and `error`.
 
 | Tool | Client function | Takes | Answers |
 |---|---|---|---|
 | `explorer_web_search` | `web_search` | `q`; `engines`, each an engine's roster name or a category standing for its engines, none for the general ones; `limit?`, 1 to 30, 10 where absent; `language?` | `hits`, each `title`, `url`, `snippet` and `engine`, mixed one from each engine in turn; `unresponsive` and `offTopic`, the engines that did not answer or answered off the query, each with why |
+| `explorer_search_images` | `search_images` | `q`; `engines`, each an image engine's roster name or a category standing for its image engines, none for every image engine; `limit?`, 1 to 30, 10 where absent; `language?` | `images`, each `url`, `pageUrl`, `title`, `creator`, `publisher`, `width`, `height`, `mediaType`, `licence` and `engine`, mixed one from each engine in turn; `unresponsive` and `offTopic` as the text search's |
 | `explorer_web_fetch` | `web_fetch` | `url` | `url`, the address the read ended at; `title`, null where the page has none; `text`, what a reader sees, at most 100,000 characters; `links`, every address the page links to once, absolute; `truncated`, true where the text was cut |
 | `explorer_link_preview` | `link_preview` | `url` | `url`; `title`, `description` and `image` as the page's head declares them for a preview, each null where it declares none |
 | `explorer_fetch_page` | `fetch_page` | `url` | `url`; `status`; `contentType`, as the server sent it; `html`, at most 512 KiB of the markup decoded as its charset says |
 | `explorer_fetch_raster` | `fetch_raster` | `url`; `width?` | `image`, the picture's bytes in base64, and `mimeType`: the picture as served, or where `width` is named and the picture is wider, redrawn as JPEG that wide |
 | `explorer_search_engines` | `search_engines` | nothing | `engines`, in the roster's order, each `name`, `category`, `koreanNative`, `state` (`unknown` where it has not been read) and `reason?`, `observedAt?`, `suspendedUntil?`, `elapsedMs?` and `resultCount?`; `cooldowns`, each a `reason` and the `restMs` an engine rests for it |
 
+- **`explorer_search_images` answers each picture as fields, not as text in a snippet:** `url` is the direct
+  image address, `pageUrl` the page it stands on and null where the engine names none, `title`, `creator` and
+  `publisher`, `width` and `height` in pixels, `mediaType`, and `licence`, which is `id`, `url` and
+  `attribution`. Every field is the engine's own statement: a field the source does not state is null, and a
+  licence is never inferred from how a page looks. A source that states no licence answers `licence` null. The
+  bytes stay `explorer_fetch_raster`'s and are not fetched here.
+- **The image engines** are the roster's `openverse`, `wikicommons.images` and `unsplash`; a search naming an
+  engine or a category that holds no image engine is refused `bad-request`. Pictures are deduplicated by their
+  direct address and mixed one engine at a time, as text hits are.
 - **`explorer_web_fetch` reads by the plain road:** the direct client, then the real Chrome after a block
   (docs/web-access.md, 「Strategies」); a PDF comes back as its text. A site tool's own reading of a page it
   claims is a tool host's (docs/site-contract.md, 「A page a tool claims」), and the MCP server has none.
@@ -109,7 +120,7 @@ under way that it would cut (the receiver's `docs/boundary-api.md`, 「The servi
 | `tools/web_search` | `web/web_search` | `web.read` | Asks the search engines directly and answers their hits as they came (docs/web-access.md) |
 | `tools/web_fetch` | `web/web_fetch` | `web.read` | Reads one page, answered by the site tool that claims its address where the record holds one (docs/site-contract.md, 「A page a tool claims」) |
 | `tools/research` | `web/research` | `web.branches` | Opens one research branch over an angle and answers its notes once it has ended (「The research branch」) |
-| `tools/explorer` | `explorer/fetch_raster`, `explorer/fetch_page`, `explorer/search_engines` | none: for the system alone | A picture, a page's head and the engines' states (below) |
+| `tools/explorer` | `explorer/fetch_raster`, `explorer/fetch_page`, `explorer/search_engines`, `explorer/search_images` | none: for the system alone | A picture, a page's head, the engines' states and a picture search with its licence fields (below) |
 | `tools/_shared/web` | the shared helper `web` | | One record's web reading, which `web_search`, `web_fetch`, `research` and every placed site tool ask on its socket |
 
 - **`web_search`, `web_fetch` and `research` name the helper `web`** among their shared helpers, and so does
@@ -212,6 +223,11 @@ the namespace `explorer`, with a JSON body naming the entry by `namespace` and `
     it has not been read), and `reason?`, `observed_at?`, `suspended_until?`, `elapsed_ms?` and
     `result_count?`;
   - `cooldowns`, each a `reason` and the `ms` an engine rests for it.
+- **`explorer/search_images`,** handed `q` and `pacing`, and optionally `engines`, `limit` and `language`. Its
+  structured content is the answer `explorer_search_images` gives: `images` with each picture's direct address,
+  page address, creator, publisher, dimensions, media type, licence and engine, and the engines that did not
+  answer or answered off the query. Its requests are paced under the `pacing` name, and it reads with the direct
+  client alone, as the other explorer entries do.
 - **Every address is checked before it is connected to,** and one that resolves inside this network is refused
   (docs/web-access.md, 「Address checks」). Requests are paced per host; `pacing` names whose requests are paced
   together.

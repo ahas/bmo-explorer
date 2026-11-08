@@ -12,11 +12,12 @@ use crate::mcp::{ENTRY, MCP, PLUGIN, generator, tools};
 const SCHEMAS: &str = "/components/schemas";
 
 const DESCRIPTION: &str = "Web reading: the search engines asked directly, a page read as words, a link's \
-  preview, a page's markup as served, the picture at an address, and the engines that answer with their \
-  standing. No HTTP of its own: the tools are the contract, served by its MCP server and placed with a tool \
-  host, each a thin call of one function of the client this repository publishes as its Rust crate. It calls no \
-  other service. Bodies are JSON with camelCase keys; times are integers of epoch milliseconds; a failure is the \
-  error shape, its code one of bad-request, unsafe-address, not-markup, too-large, upstream-failed and failed.";
+  preview, a page's markup as served, the picture at an address, the engines that answer with their standing, \
+  and a picture search whose hits carry their licence fields. No HTTP of its own: the tools are the contract, \
+  served by its MCP server and placed with a tool host, each a thin call of one function of the client this \
+  repository publishes as its Rust crate. It calls no other service. Bodies are JSON with camelCase keys; times \
+  are integers of epoch milliseconds; a failure is the error shape, its code one of bad-request, unsafe-address, \
+  not-markup, too-large, upstream-failed and failed.";
 
 /// The document as JSON.
 pub fn openapi() -> Value {

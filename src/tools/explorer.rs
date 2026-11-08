@@ -8,7 +8,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::client::{engine_standing, is_markup, page_head};
+use crate::client::{ImageSearchOutput, Licence, Picture, engine_standing, is_markup, page_head};
 use crate::store;
 use crate::tool::{Answer, Content, Hints, Served, Session, Tool};
 use crate::web::address::Check;
@@ -16,9 +16,12 @@ use crate::web::client::{decode, network};
 use crate::web::jar::StoredCookie;
 use crate::web::pacing::{Boxed, EngineHealth, Pacing, Recipe, StorePacing};
 use crate::web::picture::fetch_raster;
+use crate::web::search::{
+  DEFAULT_SEARCH_COUNT, MAX_SEARCH_COUNT, Search, SearchRoads, image_engines_named, search_images,
+};
 
 /// Every entry the executable answers, as its manifest declares them.
-pub const TOOLS: &[&dyn Served] = &[&FetchRaster, &FetchPage, &SearchEngines];
+pub const TOOLS: &[&dyn Served] = &[&FetchRaster, &FetchPage, &SearchEngines, &SearchImages];
 
 // Each reads the web and changes nothing on this machine.
 const READS: Hints = Hints {
@@ -299,5 +302,112 @@ impl Tool for SearchEngines {
       .collect();
 
     structured(&EnginesOutput { engines, cooldowns })
+  }
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ImageSearchAsk {
+  /// The query.
+  q: String,
+  /// Whose requests are paced together: one name for each run's reading.
+  pacing: String,
+  /// The image engines to ask: each an engine's roster name or a category standing for its image engines;
+  /// none for every image engine.
+  #[serde(default)]
+  engines: Vec<String>,
+  /// How many pictures to answer, 1 to 30; 10 where absent.
+  #[serde(default)]
+  limit: Option<u32>,
+  /// The language the query is written in, such as "ko" or "en"; any where absent.
+  #[serde(default)]
+  language: Option<String>,
+}
+
+/// A picture search over the image engines, each hit's fields its source's own statement.
+pub struct SearchImages;
+
+impl Tool for SearchImages {
+  const NAME: &'static str = "search_images";
+  const NAMESPACE: &'static str = "explorer";
+  const DESCRIPTION: &'static str = "Asks the image search engines directly and answers each picture as fields rather than a snippet: its direct address, the page it stands on, title, creator, publisher, pixel dimensions, media type and licence, each as the source states it and null where it states none.";
+  const HINTS: Hints = READS;
+  const CAPABILITIES: &'static [&'static str] = &[];
+  const SYSTEM: bool = true;
+
+  type Input = ImageSearchAsk;
+
+  fn output_schema() -> Option<Value> {
+    Some(schema::<ImageSearchOutput>())
+  }
+
+  async fn call(&self, session: &Session, input: ImageSearchAsk) -> Answer {
+    let pacing = match paced(session, &input.pacing) {
+      Ok(pacing) => pacing,
+      Err(refused) => return refused,
+    };
+    let query = input.q.trim();
+
+    if query.is_empty() {
+      return Answer::refusal("ERROR: The query is empty.");
+    }
+
+    let count = match input.limit {
+      None => DEFAULT_SEARCH_COUNT,
+      Some(limit @ 1..=30) => limit as usize,
+      Some(limit) => {
+        return Answer::refusal(format!("ERROR: The limit is {limit}; it is 1 to {MAX_SEARCH_COUNT}."));
+      }
+    };
+    let engines = match image_engines_named(&input.engines) {
+      Ok(engines) => engines,
+      Err(why) => return Answer::refusal(format!("ERROR: {why}")),
+    };
+    let found = match search_images(
+      &Search {
+        query,
+        count: Some(count),
+        language: input.language.as_deref(),
+        category: None,
+        engine_interval_ms: None,
+        engines: &engines,
+      },
+      &SearchRoads {
+        store: &pacing,
+        check: &Check::default(),
+        transport: &*network(),
+        render: None,
+      },
+    )
+    .await
+    {
+      Ok(found) => found,
+      Err(why) => return Answer::refusal(format!("ERROR: {}", why.message)),
+    };
+
+    structured(&ImageSearchOutput {
+      images: found
+        .images
+        .into_iter()
+        .map(|image| Picture {
+          url: image.url,
+          page_url: image.page_url,
+          title: image.title,
+          creator: image.creator,
+          publisher: image.publisher,
+          width: image.width,
+          height: image.height,
+          media_type: image.media_type,
+          licence: image.licence.map(|licence| Licence {
+            id: licence.id,
+            url: licence.url,
+            attribution: licence.attribution,
+          }),
+          engine: image.engine,
+        })
+        .collect(),
+      unresponsive: found.unresponsive,
+      off_topic: found.off_topic,
+    })
   }
 }

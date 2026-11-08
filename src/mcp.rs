@@ -19,8 +19,8 @@ use serde::de::DeserializeOwned;
 use serde_json::{Map, Value};
 
 use crate::client::{
-  ClientError, Explorer, LinkPreview, NoInput, PageSource, PageText, Raster, RasterInput,
-  SearchEnginesOutput, UrlInput, WebSearchInput, WebSearchOutput,
+  ClientError, Explorer, ImageSearchInput, ImageSearchOutput, LinkPreview, NoInput, PageSource, PageText,
+  Raster, RasterInput, SearchEnginesOutput, UrlInput, WebSearchInput, WebSearchOutput,
 };
 
 /// The plugin a harness takes the explorer in, and the command that starts its MCP server.
@@ -28,8 +28,8 @@ pub const PLUGIN: &str = "bmo-explorer";
 pub const MCP: &str = "bmo-explorer mcp";
 
 /// What a harness does first with it, which the server tells a harness when it starts.
-pub const ENTRY: &str =
-  "A harness searches with explorer_web_search and reads a hit with explorer_web_fetch.";
+pub const ENTRY: &str = "A harness searches with explorer_web_search and reads a hit with explorer_web_fetch; \
+  it finds pictures with explorer_search_images and reads one with explorer_fetch_raster.";
 
 /// What a client function's call comes to: its answer, or the failure in the wire format's error shape.
 pub type Answering<'a, O> = Pin<Box<dyn Future<Output = Result<O, ClientError>> + Send + 'a>>;
@@ -108,6 +108,10 @@ fn web_search(client: &Explorer, asked: WebSearchInput) -> Answering<'_, WebSear
   Box::pin(async move { client.web_search(&asked).await })
 }
 
+fn search_images(client: &Explorer, asked: ImageSearchInput) -> Answering<'_, ImageSearchOutput> {
+  Box::pin(async move { client.search_images(&asked).await })
+}
+
 fn web_fetch(client: &Explorer, asked: UrlInput) -> Answering<'_, PageText> {
   Box::pin(async move { client.web_fetch(&asked.url).await })
 }
@@ -137,6 +141,15 @@ pub fn tools() -> Vec<ExplorerTool> {
        turn. Name the engines or their categories from explorer_search_engines, or none for the general ones.",
       "web_search",
       web_search,
+    ),
+    tool(
+      "explorer_search_images",
+      "Ask the image search engines directly; each picture answered as fields rather than a snippet: its direct \
+       address, the page it stands on, title, creator, publisher, pixel dimensions, media type and licence. A \
+       field the source does not state is null, and no licence is inferred. Name the image engines or their \
+       categories from explorer_search_engines, or none for every image engine.",
+      "search_images",
+      search_images,
     ),
     tool(
       "explorer_web_fetch",

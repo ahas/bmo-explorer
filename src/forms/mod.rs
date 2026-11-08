@@ -16,6 +16,6 @@ pub mod text;
 pub use engine::{EngineHealth, EngineState};
 pub use error::{Failure, WebError, WebResult};
 pub use fetch::MAX_FETCH_CHARS;
-pub use search::{SearchHit, SearchResults};
+pub use search::{ImageHit, ImageLicence, ImageResults, SearchHit, SearchResults};
 pub use slice::{DEFAULT_FETCH_CHARS, FetchSlice, render_slice, slice_content};
 pub use text::{tidy, tidy_blank_runs};

@@ -611,6 +611,119 @@ fn the_image_apis_name_the_page_and_carry_the_picture() {
   assert!(photos[0].url.starts_with("https://unsplash.com/"));
 }
 
+// The image engines answer pictures as their own fields: a field the source does not state is none, and a
+// licence is never filled in from what the page looks like.
+#[test]
+fn the_image_engines_answer_pictures_as_their_own_fields() {
+  let openverse = parse_openverse_images(&engines_fixture("openverse.json"));
+
+  assert_eq!(openverse[0].url, "https://live.staticflickr.com/2786/4483195426_14127881f7.jpg");
+  assert_eq!(
+    openverse[0].page_url.as_deref(),
+    Some("https://www.flickr.com/photos/55514420@N00/4483195426")
+  );
+  assert_eq!(openverse[0].creator.as_deref(), Some("davidyuweb"));
+  assert_eq!(openverse[0].publisher.as_deref(), Some("flickr"));
+  assert_eq!((openverse[0].width, openverse[0].height), (Some(500), Some(375)));
+  assert_eq!(openverse[0].media_type, None);
+  let licence = openverse[0].licence.as_ref().unwrap();
+  assert_eq!(licence.id, "CC-BY-NC-2.0");
+  assert_eq!(licence.url.as_deref(), Some("https://creativecommons.org/licenses/by-nc/2.0/"));
+  assert!(licence.attribution.as_deref().unwrap().contains("davidyuweb"));
+  assert_eq!(openverse[1].media_type.as_deref(), Some("image/jpeg"));
+
+  let commons = parse_wikimedia_commons_images(&engines_fixture("wikimedia-commons.json"));
+
+  assert_eq!(
+    commons[0].url,
+    "https://upload.wikimedia.org/wikipedia/commons/c/c6/August_2007%2C_walking_in_Seoul_11.jpg"
+  );
+  assert_eq!(commons[0].title, "August 2007, walking in Seoul 11.jpg");
+  assert_eq!(commons[0].creator.as_deref(), Some("Sample author"));
+  assert_eq!(commons[0].publisher.as_deref(), Some("Wikimedia Commons"));
+  assert_eq!((commons[0].width, commons[0].height), (Some(3072), Some(2304)));
+  assert_eq!(commons[0].media_type.as_deref(), Some("image/jpeg"));
+  assert_eq!(commons[0].licence.as_ref().unwrap().id, "CC0");
+  assert_eq!(commons[1].licence.as_ref().unwrap().id, "CC-BY-SA-4.0");
+
+  let photos = parse_unsplash_images(&engines_fixture("unsplash.json"));
+
+  assert!(photos[0].url.contains("premium_photo-1661936414165"));
+  assert_eq!(photos[0].creator.as_deref(), Some("Sample photographer"));
+  assert_eq!(photos[0].publisher.as_deref(), Some("Unsplash"));
+  assert_eq!((photos[0].width, photos[0].height), (Some(4000), Some(3000)));
+  // The search answer states neither a media type nor a licence for one photo.
+  assert_eq!((photos[0].media_type.as_deref(), photos[0].licence.as_ref()), (None, None));
+}
+
+// An engine that answers words alone is no image source.
+#[test]
+fn only_the_image_engines_answer_pictures() {
+  let sources: Vec<&str> = ENGINES
+    .iter()
+    .filter(|engine| engine.image_source())
+    .map(|engine| engine.name())
+    .collect();
+
+  assert_eq!(sources, ["openverse", "wikicommons.images", "unsplash"]);
+  assert!(
+    ENGINES
+      .iter()
+      .filter(|engine| !engine.image_source())
+      .all(|engine| engine.parse_images("").is_none())
+  );
+}
+
+fn image_web() -> Web {
+  let openverse = engines_fixture("openverse.json");
+  let commons = engines_fixture("wikimedia-commons.json");
+  let unsplash = engines_fixture("unsplash.json");
+
+  Web::default()
+    .route("api.openverse.org", move |_| {
+      answer(200, &[("content-type", "application/json")], openverse.as_bytes())
+    })
+    .route("commons.wikimedia.org", move |_| {
+      answer(200, &[("content-type", "application/json")], commons.as_bytes())
+    })
+    .route("unsplash.com", move |_| {
+      answer(200, &[("content-type", "application/json")], unsplash.as_bytes())
+    })
+}
+
+#[tokio::test]
+async fn an_image_search_mixes_one_picture_from_each_engine_in_turn() {
+  let web = image_web();
+  let store = MemoryPacing::default();
+  let clock = StandingClock::at(10_000);
+  let check = check(clock.clone());
+  let found = search_images(
+    &Search {
+      query: "seoul",
+      count: Some(5),
+      language: None,
+      category: None,
+      engine_interval_ms: None,
+      engines: &[],
+    },
+    &SearchRoads {
+      store: &store,
+      check: &check,
+      transport: &web,
+      render: None,
+    },
+  )
+  .await
+  .unwrap();
+
+  assert_eq!(
+    found.images.iter().map(|image| image.engine.as_str()).collect::<Vec<_>>(),
+    ["openverse", "wikicommons.images", "unsplash", "openverse", "wikicommons.images"]
+  );
+  assert!(found.images.iter().all(|image| !image.url.is_empty()));
+  assert!(found.unresponsive.is_empty());
+}
+
 // Carried from packages/web/search-engines.test.ts: GitHub's repositories and Stack Overflow's questions
 #[test]
 fn githubs_repositories_and_stack_overflows_questions() {

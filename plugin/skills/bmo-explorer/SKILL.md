@@ -1,6 +1,6 @@
 ---
 name: bmo-explorer
-description: Search the web by asking the search engines directly and read pages as their own words, through the bmo-explorer MCP server; also a link's preview, a page's raw HTML, a picture at an address and which engines answer. Use when a question needs facts from the web, a URL has to be read, a link previewed or a web picture looked at, and before reporting anything as found online.
+description: Search the web by asking the search engines directly and read pages as their own words, through the bmo-explorer MCP server; also a link's preview, a page's raw HTML, a picture at an address, a picture search with its licence fields, and which engines answer. Use when a question needs facts from the web, a URL has to be read, a link previewed, a licensed web picture searched or looked at, and before reporting anything as found online.
 ---
 
 # bmo-explorer
@@ -31,7 +31,11 @@ leave it.
 2. `explorer_web_fetch` with a hit's `url`: the page's `title`, the `text` a reader sees and its `links`. A page
    that refuses a plain request is read in a real Chrome; a PDF comes back as its text. `truncated` says the text
    stopped at 100,000 characters.
-3. Cite only pages actually read, and say plainly what could not be confirmed.
+3. For pictures with their provenance, `explorer_search_images` with `q`: each `images` entry carries `url`, the
+   direct image address, `pageUrl`, `title`, `creator`, `publisher`, `width`, `height`, `mediaType` and
+   `licence` (`id`, `url`, `attribution`), each null where the source states none. Read the bytes with
+   `explorer_fetch_raster`.
+4. Cite only pages actually read, and say plainly what could not be confirmed.
 
 ## The other tools
 
@@ -40,6 +44,9 @@ leave it.
   reading markup a text reading drops.
 - `explorer_fetch_raster`: the picture at an address in base64 with its `mimeType`; `width` narrows a wider one
   to a JPEG that wide.
+- `explorer_search_images`: the image engines' pictures as fields — direct address, page address, title,
+  creator, publisher, dimensions, media type and licence — with the same `unresponsive` and `offTopic` notes as
+  a text search.
 - `explorer_search_engines`: each engine's category and `state` (`healthy`, `degraded`, `suspended`,
   `unknown`), and `cooldowns`, how long an engine rests after each kind of refusal. Read it when a search comes
   back with engines `unresponsive`, rather than asking again at once.

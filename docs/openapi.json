@@ -125,6 +125,61 @@
         ],
         "type": "object"
       },
+      "ImageSearchOutput": {
+        "description": "The image engines' pictures, mixed one from each engine in turn.",
+        "properties": {
+          "images": {
+            "items": {
+              "$ref": "#/components/schemas/Picture"
+            },
+            "type": "array"
+          },
+          "offTopic": {
+            "description": "The engines whose answer did not carry the query's terms.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unresponsive": {
+            "description": "The engines that did not answer, each with why.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "images",
+          "unresponsive",
+          "offTopic"
+        ],
+        "type": "object"
+      },
+      "Licence": {
+        "description": "The licence a source states for one picture.",
+        "properties": {
+          "attribution": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
       "LinkPreview": {
         "description": "A link's preview, as the page's head declares it.",
         "properties": {
@@ -225,6 +280,82 @@
         ],
         "type": "object"
       },
+      "Picture": {
+        "description": "One picture as its engine answered it, each field the source's own statement or null.",
+        "properties": {
+          "creator": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "engine": {
+            "description": "The engine that answered it.",
+            "type": "string"
+          },
+          "height": {
+            "description": "The picture's height in pixels, where the source states it.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Licence"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The licence the source states for this picture; null where it states none."
+          },
+          "mediaType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pageUrl": {
+            "description": "The page the picture stands on; null where the engine names none.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publisher": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "description": "The direct image address.",
+            "type": "string"
+          },
+          "width": {
+            "description": "The picture's width in pixels, where the source states it.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "url",
+          "title",
+          "engine"
+        ],
+        "type": "object"
+      },
       "Raster": {
         "description": "A picture.",
         "properties": {
@@ -299,7 +430,7 @@
     }
   },
   "info": {
-    "description": "Web reading: the search engines asked directly, a page read as words, a link's preview, a page's markup as served, the picture at an address, and the engines that answer with their standing. No HTTP of its own: the tools are the contract, served by its MCP server and placed with a tool host, each a thin call of one function of the client this repository publishes as its Rust crate. It calls no other service. Bodies are JSON with camelCase keys; times are integers of epoch milliseconds; a failure is the error shape, its code one of bad-request, unsafe-address, not-markup, too-large, upstream-failed and failed.",
+    "description": "Web reading: the search engines asked directly, a page read as words, a link's preview, a page's markup as served, the picture at an address, the engines that answer with their standing, and a picture search whose hits carry their licence fields. No HTTP of its own: the tools are the contract, served by its MCP server and placed with a tool host, each a thin call of one function of the client this repository publishes as its Rust crate. It calls no other service. Bodies are JSON with camelCase keys; times are integers of epoch milliseconds; a failure is the error shape, its code one of bad-request, unsafe-address, not-markup, too-large, upstream-failed and failed.",
     "title": "bmo-explorer",
     "version": "0.1.0-rev.5"
   },
@@ -307,7 +438,7 @@
   "paths": {},
   "x-calls": [],
   "x-harness": {
-    "entry": "A harness searches with explorer_web_search and reads a hit with explorer_web_fetch.",
+    "entry": "A harness searches with explorer_web_search and reads a hit with explorer_web_fetch; it finds pictures with explorer_search_images and reads one with explorer_fetch_raster.",
     "mcp": "bmo-explorer mcp",
     "plugin": "bmo-explorer"
   },
@@ -359,6 +490,55 @@
       "name": "explorer_web_search",
       "output": {
         "$ref": "#/components/schemas/WebSearchOutput"
+      },
+      "route": null
+    },
+    {
+      "description": "Ask the image search engines directly; each picture answered as fields rather than a snippet: its direct address, the page it stands on, title, creator, publisher, pixel dimensions, media type and licence. A field the source does not state is null, and no licence is inferred. Name the image engines or their categories from explorer_search_engines, or none for every image engine.",
+      "function": "bmo_explorer::client::Explorer::search_images",
+      "input": {
+        "additionalProperties": false,
+        "description": "A search of the image engines.",
+        "properties": {
+          "engines": {
+            "default": [],
+            "description": "The image engines to ask: each an engine's name as explorer_search_engines lists it, or a category\nstanding for its image engines. An empty list asks every image engine.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "language": {
+            "default": null,
+            "description": "The language the query is written in, such as \"ko\" or \"en\"; any where absent.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "limit": {
+            "default": null,
+            "description": "How many pictures to answer, 1 to 30; 10 where absent.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "q": {
+            "description": "The query.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "q"
+        ],
+        "type": "object"
+      },
+      "name": "explorer_search_images",
+      "output": {
+        "$ref": "#/components/schemas/ImageSearchOutput"
       },
       "route": null
     },

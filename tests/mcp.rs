@@ -1,5 +1,5 @@
 //! The MCP server's test (docs/api.md, 「The MCP server」): `bmo-explorer mcp` started as a harness starts it,
-//! asked over its standard input, lists exactly the six tools and answers a call that fails in the error shape.
+//! asked over its standard input, lists exactly the seven tools and answers a call that fails in the error shape.
 
 use std::process::Stdio;
 use std::time::Duration;
@@ -12,7 +12,7 @@ use tokio::process::Command;
 const BOUND: Duration = Duration::from_secs(30);
 
 #[tokio::test]
-async fn the_server_starts_lists_the_six_tools_and_answers_a_refusal_in_the_error_shape() {
+async fn the_server_starts_lists_the_seven_tools_and_answers_a_refusal_in_the_error_shape() {
   let root = tempfile::tempdir().unwrap();
   let mut server = Command::new(env!("CARGO_BIN_EXE_bmo-explorer"))
     .args(["mcp", "--data-root"])
@@ -82,6 +82,7 @@ async fn the_server_starts_lists_the_six_tools_and_answers_a_refusal_in_the_erro
     tools,
     [
       "explorer_web_search",
+      "explorer_search_images",
       "explorer_web_fetch",
       "explorer_link_preview",
       "explorer_fetch_page",

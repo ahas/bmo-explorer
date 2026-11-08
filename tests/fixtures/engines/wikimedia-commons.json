@@ -12,7 +12,17 @@
      {
       "url": "https://upload.wikimedia.org/wikipedia/commons/c/c6/August_2007%2C_walking_in_Seoul_11.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
       "descriptionurl": "https://commons.wikimedia.org/wiki/File:August_2007,_walking_in_Seoul_11.jpg",
-      "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=147077005"
+      "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=147077005",
+      "size": 2049287,
+      "width": 3072,
+      "height": 2304,
+      "mime": "image/jpeg",
+      "extmetadata": {
+       "Artist": {"value": "<a href=\"//commons.wikimedia.org/wiki/User:Sample\">Sample author</a>"},
+       "LicenseShortName": {"value": "CC0"},
+       "License": {"value": "cc0"},
+       "LicenseUrl": {"value": "http://creativecommons.org/publicdomain/zero/1.0/deed.en"}
+      }
      }
     ]
    },
@@ -26,7 +36,17 @@
      {
       "url": "https://upload.wikimedia.org/wikipedia/commons/5/50/August_2007%2C_walking_in_Seoul_116.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
       "descriptionurl": "https://commons.wikimedia.org/wiki/File:August_2007,_walking_in_Seoul_116.jpg",
-      "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=147106355"
+      "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=147106355",
+      "size": 2049287,
+      "width": 3072,
+      "height": 2304,
+      "mime": "image/jpeg",
+      "extmetadata": {
+       "Artist": {"value": "<span>Sample photographer</span>"},
+       "LicenseShortName": {"value": "CC BY-SA 4.0"},
+       "License": {"value": "cc-by-sa-4.0"},
+       "LicenseUrl": {"value": "https://creativecommons.org/licenses/by-sa/4.0/"}
+      }
      }
     ]
    }

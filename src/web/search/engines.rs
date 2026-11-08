@@ -4,8 +4,9 @@
 use url::Url;
 
 use super::engine::{
-  Cause, Diagnosis, Engine, EngineAnswer, EngineHit, EngineQuery, attribute_of, collect_items, hits_of,
-  kept_hits, squeeze, string, text, text_of,
+  Cause, Diagnosis, Engine, EngineAnswer, EngineHit, EngineImage, EngineLicence, EngineQuery, attribute_of,
+  collect_items, hits_of, kept_hits, kept_images, pixels, squeeze, string, string_where, text, text_of,
+  text_where,
 };
 
 fn with_query(base: &str, pairs: &[(&str, &str)]) -> String {
@@ -452,6 +453,11 @@ fn joined(parts: &[String], by: &str) -> String {
   parts.iter().filter(|part| !part.is_empty()).cloned().collect::<Vec<_>>().join(by)
 }
 
+// A JSON value's address, where it is an http or https one.
+fn web_where(value: &serde_json::Value) -> Option<String> {
+  string_where(value).filter(|address| address.starts_with("http://") || address.starts_with("https://"))
+}
+
 /// Openverse's image API: a result's address is the page the picture stands on, and the picture's own
 /// address rides in its snippet.
 pub struct Openverse;
@@ -491,9 +497,81 @@ pub fn parse_openverse(body: &str) -> Vec<EngineHit> {
   )
 }
 
+// The licence Openverse names: its slug and version, the address it gives for it and its attribution line.
+fn openverse_licence(result: &serde_json::Value) -> Option<EngineLicence> {
+  let slug = string_where(&result["license"])?;
+  let version = string(&result["license_version"]);
+
+  Some(EngineLicence {
+    id: openverse_licence_id(&slug, &version),
+    url: string_where(&result["license_url"]),
+    attribution: text_where(&result["attribution"]),
+  })
+}
+
+fn openverse_licence_id(slug: &str, version: &str) -> String {
+  let family = match slug {
+    "cc0" => "CC0".to_owned(),
+    "pdm" => "PDM".to_owned(),
+    other => format!("CC-{}", other.to_uppercase()),
+  };
+
+  if version.is_empty() { family } else { format!("{family}-{version}") }
+}
+
+// The media type Openverse names in its filetype; a filetype it does not state is none.
+fn openverse_media_type(result: &serde_json::Value) -> Option<String> {
+  let kind = string_where(&result["filetype"])?;
+  let mime = match kind.to_lowercase().as_str() {
+    "jpg" | "jpeg" => "image/jpeg",
+    "png" => "image/png",
+    "gif" => "image/gif",
+    "webp" => "image/webp",
+    "svg" => "image/svg+xml",
+    "tif" | "tiff" => "image/tiff",
+    "avif" => "image/avif",
+    _ => return None,
+  };
+
+  Some(mime.to_owned())
+}
+
+pub fn parse_openverse_images(body: &str) -> Vec<EngineImage> {
+  let payload = json(body);
+  let Some(results) = payload["results"].as_array() else {
+    return Vec::new();
+  };
+
+  kept_images(
+    results
+      .iter()
+      .filter(|result| result.is_object())
+      .map(|result| EngineImage {
+        url: string(&result["url"]),
+        page_url: web_where(&result["foreign_landing_url"]),
+        title: text(&result["title"]),
+        creator: text_where(&result["creator"]),
+        publisher: text_where(&result["provider"]).or_else(|| text_where(&result["source"])),
+        width: pixels(&result["width"]),
+        height: pixels(&result["height"]),
+        media_type: openverse_media_type(result),
+        licence: openverse_licence(result),
+      })
+      .collect(),
+  )
+}
+
 impl Engine for Openverse {
   fn name(&self) -> &'static str {
     "openverse"
+  }
+
+  fn image_source(&self) -> bool {
+    true
+  }
+
+  fn parse_images(&self, body: &str) -> Option<Vec<EngineImage>> {
+    Some(parse_openverse_images(body))
   }
 
   // Without `format=json` the API answers a browser with its HTML console.
@@ -552,9 +630,87 @@ pub fn parse_wikimedia_commons(body: &str) -> Vec<EngineHit> {
   )
 }
 
+// The licence Commons states in a file's metadata: its short name, the address it gives and the artist it
+// names; a file whose metadata states none carries no licence.
+fn commons_licence(metadata: &serde_json::Value, creator: Option<&str>) -> Option<EngineLicence> {
+  let short = text(&metadata["LicenseShortName"]["value"]);
+  let template = text(&metadata["License"]["value"]);
+  let id = commons_licence_id(&short, &template);
+
+  if id.is_empty() {
+    return None;
+  }
+
+  let named = if short.is_empty() { template } else { short };
+  let parts: Vec<&str> = [creator.unwrap_or(""), named.as_str()]
+    .into_iter()
+    .filter(|part| !part.is_empty())
+    .collect();
+
+  Some(EngineLicence {
+    id,
+    url: string_where(&metadata["LicenseUrl"]["value"]),
+    attribution: (!parts.is_empty()).then(|| parts.join(" — ")),
+  })
+}
+
+fn commons_licence_id(short: &str, template: &str) -> String {
+  let named = if short.trim().is_empty() { template.trim() } else { short.trim() };
+  let upper = named.to_uppercase();
+
+  if upper.starts_with("CC") {
+    upper.split_whitespace().collect::<Vec<_>>().join("-")
+  } else {
+    named.to_owned()
+  }
+}
+
+pub fn parse_wikimedia_commons_images(body: &str) -> Vec<EngineImage> {
+  let payload = json(body);
+  let Some(pages) = payload["query"]["pages"].as_object() else {
+    return Vec::new();
+  };
+  let mut ordered: Vec<&serde_json::Value> = pages.values().filter(|page| page.is_object()).collect();
+
+  ordered.sort_by(|a, b| a["index"].as_f64().unwrap_or(0.0).total_cmp(&b["index"].as_f64().unwrap_or(0.0)));
+
+  kept_images(
+    ordered
+      .into_iter()
+      .map(|page| {
+        let info = &page["imageinfo"][0];
+        let metadata = &info["extmetadata"];
+        let title = text(&page["title"]);
+        let creator =
+          text_where(&metadata["Artist"]["value"]).or_else(|| text_where(&metadata["Credit"]["value"]));
+
+        EngineImage {
+          url: string(&info["url"]).split('?').next().unwrap_or("").to_owned(),
+          page_url: web_where(&info["descriptionurl"]),
+          title: title.strip_prefix("File:").unwrap_or(&title).to_owned(),
+          creator: creator.clone(),
+          publisher: Some("Wikimedia Commons".to_owned()),
+          width: pixels(&info["width"]),
+          height: pixels(&info["height"]),
+          media_type: string_where(&info["mime"]),
+          licence: commons_licence(metadata, creator.as_deref()),
+        }
+      })
+      .collect(),
+  )
+}
+
 impl Engine for WikimediaCommons {
   fn name(&self) -> &'static str {
     "wikicommons.images"
+  }
+
+  fn image_source(&self) -> bool {
+    true
+  }
+
+  fn parse_images(&self, body: &str) -> Option<Vec<EngineImage>> {
+    Some(parse_wikimedia_commons_images(body))
   }
 
   fn request(&self, query: &EngineQuery<'_>) -> String {
@@ -573,7 +729,7 @@ impl Engine for WikimediaCommons {
         ("gsrprop", "snippet"),
         ("gsrlimit", "10"),
         ("gsrsearch", &search),
-        ("iiprop", "url|size|mime"),
+        ("iiprop", "url|size|mime|extmetadata"),
       ],
     )
   }
@@ -625,9 +781,60 @@ pub fn parse_unsplash(body: &str) -> Vec<EngineHit> {
   )
 }
 
+pub fn parse_unsplash_images(body: &str) -> Vec<EngineImage> {
+  let payload = json(body);
+  let Some(results) = payload["results"].as_array() else {
+    return Vec::new();
+  };
+
+  kept_images(
+    results
+      .iter()
+      .filter(|result| result.is_object())
+      .map(|result| {
+        let described = text(&result["description"]);
+        let alt = text(&result["alt_description"]);
+        let title = if !alt.is_empty() {
+          alt
+        } else if !described.is_empty() {
+          described
+        } else {
+          "untitled photo".to_owned()
+        };
+        // The largest rendition the answer names, so the dimensions beside it describe the address given.
+        let url = ["full", "regular", "small"]
+          .iter()
+          .find_map(|size| string_where(&result["urls"][size]))
+          .unwrap_or_default();
+
+        EngineImage {
+          url,
+          page_url: web_where(&result["links"]["html"]),
+          title,
+          creator: text_where(&result["user"]["name"]).or_else(|| text_where(&result["user"]["username"])),
+          publisher: Some("Unsplash".to_owned()),
+          width: pixels(&result["width"]),
+          height: pixels(&result["height"]),
+          // The search answer states neither a media type nor a licence for one photo; none is guessed.
+          media_type: None,
+          licence: None,
+        }
+      })
+      .collect(),
+  )
+}
+
 impl Engine for Unsplash {
   fn name(&self) -> &'static str {
     "unsplash"
+  }
+
+  fn image_source(&self) -> bool {
+    true
+  }
+
+  fn parse_images(&self, body: &str) -> Option<Vec<EngineImage>> {
+    Some(parse_unsplash_images(body))
   }
 
   fn request(&self, query: &EngineQuery<'_>) -> String {

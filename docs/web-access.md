@@ -373,6 +373,22 @@
 - **The final list alternates** between the engines that answered, so one engine's first page never
   pushes out every other answer.
 
+### Pictures as fields
+
+- **An image engine answers pictures, not snippets.** Openverse's API, the Wikimedia Commons API over file pages
+  and Unsplash's public search each name a picture's direct image address, the page it stands on, a title, a
+  creator, a publisher, its pixel dimensions, its media type and, where the source states one, its licence. The
+  licence carries the source's own id, the licence address it gives and the attribution line it states.
+- **Each engine reads its own answer.** An engine that answers pictures declares it and reads its own API's
+  fields; the shared layer names no engine and no source. An engine that answers words alone is no image source
+  and is left out of a picture search.
+- **Nothing is invented.** A field the source does not state is null, and a licence is never inferred from how a
+  page looks; a source that states no licence answers none. The bytes are not fetched here: `fetch_raster` is
+  the one road to them.
+- **Pictures are mixed as text hits are:** one from each answering engine in turn, deduplicated by their direct
+  address, and an engine whose answer carries too little of the query is left out and marked `degraded` by the
+  same terms.
+
 ### What this network cannot reach
 
 Measured from the deployment's network with the engines' own forms of request:

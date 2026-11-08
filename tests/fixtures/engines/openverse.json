@@ -6,16 +6,30 @@
    "foreign_landing_url": "https://www.flickr.com/photos/55514420@N00/4483195426",
    "url": "https://live.staticflickr.com/2786/4483195426_14127881f7.jpg",
    "creator": "davidyuweb",
+   "provider": "flickr",
+   "source": "flickr",
+   "width": 500,
+   "height": 375,
+   "filetype": null,
    "license": "by-nc",
-   "license_version": "2.0"
+   "license_version": "2.0",
+   "license_url": "https://creativecommons.org/licenses/by-nc/2.0/",
+   "attribution": "\"Cherry Blossom\" by davidyuweb is licensed under CC BY-NC 2.0."
   },
   {
    "title": "Cherry blossoms",
    "foreign_landing_url": "https://www.flickr.com/photos/132295270@N07/39797600745",
    "url": "https://live.staticflickr.com/4800/39797600745_65436ccdb6_b.jpg",
    "creator": "Monkeystyle3000",
+   "provider": "flickr",
+   "source": "flickr",
+   "width": 1024,
+   "height": 683,
+   "filetype": "jpg",
    "license": "by",
-   "license_version": "2.0"
+   "license_version": "2.0",
+   "license_url": "https://creativecommons.org/licenses/by/2.0/",
+   "attribution": "\"Cherry blossoms\" by Monkeystyle3000 is licensed under CC BY 2.0."
   }
  ]
 }

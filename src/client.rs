@@ -23,7 +23,8 @@ use crate::web::picture::{fetch_raster, raster};
 use crate::web::search::engine::declared;
 use crate::web::search::roster::ROSTER;
 use crate::web::search::{
-  DEFAULT_SEARCH_COUNT, ENGINES, MAX_SEARCH_COUNT, Search, SearchRoads, render_through, search_web,
+  DEFAULT_SEARCH_COUNT, ENGINES, MAX_SEARCH_COUNT, Search, SearchRoads, image_engines_named,
+  render_through, search_images as search_images_web, search_web,
 };
 use crate::web::session::{FetchPage, SessionParts, WebSession};
 use crate::web::{Failure, WebError};
@@ -114,6 +115,66 @@ pub struct Hit {
   pub snippet: String,
   /// The engine that answered it.
   pub engine: String,
+}
+
+/// A search of the image engines.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImageSearchInput {
+  /// The query.
+  pub q: String,
+  /// The image engines to ask: each an engine's name as explorer_search_engines lists it, or a category
+  /// standing for its image engines. An empty list asks every image engine.
+  #[serde(default)]
+  pub engines: Vec<String>,
+  /// How many pictures to answer, 1 to 30; 10 where absent.
+  #[serde(default)]
+  pub limit: Option<u32>,
+  /// The language the query is written in, such as "ko" or "en"; any where absent.
+  #[serde(default)]
+  pub language: Option<String>,
+}
+
+/// The image engines' pictures, mixed one from each engine in turn.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageSearchOutput {
+  pub images: Vec<Picture>,
+  /// The engines that did not answer, each with why.
+  pub unresponsive: Vec<String>,
+  /// The engines whose answer did not carry the query's terms.
+  pub off_topic: Vec<String>,
+}
+
+/// One picture as its engine answered it, each field the source's own statement or null.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Picture {
+  /// The direct image address.
+  pub url: String,
+  /// The page the picture stands on; null where the engine names none.
+  pub page_url: Option<String>,
+  pub title: String,
+  pub creator: Option<String>,
+  pub publisher: Option<String>,
+  /// The picture's width in pixels, where the source states it.
+  pub width: Option<u32>,
+  /// The picture's height in pixels, where the source states it.
+  pub height: Option<u32>,
+  pub media_type: Option<String>,
+  /// The licence the source states for this picture; null where it states none.
+  pub licence: Option<Licence>,
+  /// The engine that answered it.
+  pub engine: String,
+}
+
+/// The licence a source states for one picture.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct Licence {
+  pub id: String,
+  pub url: Option<String>,
+  pub attribution: Option<String>,
 }
 
 /// One address.
@@ -300,6 +361,68 @@ impl Explorer {
           url: hit.url,
           snippet: hit.snippet,
           engine: hit.engine,
+        })
+        .collect(),
+      unresponsive: found.unresponsive,
+      off_topic: found.off_topic,
+    })
+  }
+
+  /// The image engines asked directly, each picture answered as the fields its source states.
+  pub async fn search_images(&self, asked: &ImageSearchInput) -> Result<ImageSearchOutput, ClientError> {
+    let query = asked.q.trim();
+
+    if query.is_empty() {
+      return Err(ClientError::bad_request("The query is empty."));
+    }
+
+    let count = match asked.limit {
+      None => DEFAULT_SEARCH_COUNT,
+      Some(limit @ 1..=30) => limit as usize,
+      Some(limit) => {
+        return Err(ClientError::bad_request(format!(
+          "The limit is {limit}; it is 1 to {MAX_SEARCH_COUNT}."
+        )));
+      }
+    };
+    let engines = image_engines_named(&asked.engines).map_err(ClientError::bad_request)?;
+    let found = search_images_web(
+      &Search {
+        query,
+        count: Some(count),
+        language: asked.language.as_deref(),
+        category: None,
+        engine_interval_ms: None,
+        engines: &engines,
+      },
+      &SearchRoads {
+        store: &**self.session.store(),
+        check: self.session.check(),
+        transport: &**self.session.transport(),
+        render: Some(render_through(self.session.clone())),
+      },
+    )
+    .await?;
+
+    Ok(ImageSearchOutput {
+      images: found
+        .images
+        .into_iter()
+        .map(|image| Picture {
+          url: image.url,
+          page_url: image.page_url,
+          title: image.title,
+          creator: image.creator,
+          publisher: image.publisher,
+          width: image.width,
+          height: image.height,
+          media_type: image.media_type,
+          licence: image.licence.map(|licence| Licence {
+            id: licence.id,
+            url: licence.url,
+            attribution: licence.attribution,
+          }),
+          engine: image.engine,
         })
         .collect(),
       unresponsive: found.unresponsive,

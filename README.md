@@ -1,11 +1,11 @@
 # explorer
 
-`bmo-explorer`: web reading as an upstream. It holds the client of its six operations — a search of the
-engines, a page read as words, a link's preview, a page's markup, the picture at an address and the engines'
-standing — the MCP server a harness starts as `bmo-explorer mcp` with its `bmo-explorer` skill, the web tools
-a tool host places, the shared web helper that keeps one investigation's reading, and the site contract site
-tools stand on. It serves no HTTP of its own, and the one service it calls is the research unit a research
-record names, for a research branch.
+`bmo-explorer`: web reading as an upstream. It holds the client of its seven operations — a search of the
+engines, a page read as words, a link's preview, a page's markup, the picture at an address, the engines'
+standing and a picture search whose hits carry their licence fields — the MCP server a harness starts as
+`bmo-explorer mcp` with its `bmo-explorer` skill, the web tools a tool host places, the shared web helper that
+keeps one investigation's reading, and the site contract site tools stand on. It serves no HTTP of its own, and
+the one service it calls is the research unit a research record names, for a research branch.
 
 ## Layout
 

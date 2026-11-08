@@ -31,6 +31,44 @@ pub struct EngineHit {
   pub snippet: String,
 }
 
+/// The licence an image engine states for one picture, in the engine's own words.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EngineLicence {
+  pub id: String,
+  pub url: Option<String>,
+  pub attribution: Option<String>,
+}
+
+/// One picture as an image engine's own answer states it: a field the engine does not state is none.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EngineImage {
+  /// The direct image address.
+  pub url: String,
+  /// The page the picture stands on; none where the engine names none.
+  pub page_url: Option<String>,
+  pub title: String,
+  pub creator: Option<String>,
+  pub publisher: Option<String>,
+  pub width: Option<u32>,
+  pub height: Option<u32>,
+  pub media_type: Option<String>,
+  pub licence: Option<EngineLicence>,
+}
+
+/// What a search asks its engines for: words, or pictures with their fields.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Asked {
+  Text,
+  Images,
+}
+
+/// What one engine answered with.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Found {
+  Text(Vec<EngineHit>),
+  Images(Vec<EngineImage>),
+}
+
 pub struct EngineQuery<'a> {
   pub query: &'a str,
   /// `ko-KR`, `en` and the like: what the query is written in.
@@ -109,6 +147,15 @@ pub trait Engine: Send + Sync {
   fn request(&self, query: &EngineQuery<'_>) -> String;
   /// The engine's answer read into results, in the engine's own order.
   fn parse(&self, body: &str) -> Vec<EngineHit>;
+  /// Whether this engine answers pictures with their fields under `parse_images`.
+  fn image_source(&self) -> bool {
+    false
+  }
+  /// The engine's answer read into pictures, each field the source's own statement; none where this engine
+  /// is no image source.
+  fn parse_images(&self, _body: &str) -> Option<Vec<EngineImage>> {
+    None
+  }
   /// The engine's own block pages, beyond what every engine's answer is read for.
   fn recognise(&self, _answer: &EngineAnswer) -> Option<Diagnosis> {
     None
@@ -386,7 +433,7 @@ pub struct EngineRoads<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Outcome {
   Answered {
-    hits: Vec<EngineHit>,
+    found: Found,
     elapsed_ms: u64,
     remedy: Option<Remedy>,
     diagnosis: Option<Diagnosis>,
@@ -421,6 +468,7 @@ pub async fn ask_engine(
   engine: &dyn Engine,
   query: &EngineQuery<'_>,
   roads: &EngineRoads<'_>,
+  asked: Asked,
 ) -> WebResult<Outcome> {
   let clock = &*roads.check.clock;
   let store = roads.store;
@@ -503,8 +551,13 @@ pub async fn ask_engine(
       });
     }
 
+    let found = match asked {
+      Asked::Text => Found::Text(engine.parse(&answer.body)),
+      Asked::Images => Found::Images(engine.parse_images(&answer.body).unwrap_or_default()),
+    };
+
     Read::Done(Outcome::Answered {
-      hits: engine.parse(&answer.body),
+      found,
       elapsed_ms: elapsed(),
       remedy: None,
       diagnosis: None,
@@ -602,9 +655,9 @@ pub async fn ask_engine(
 
   Ok(match second {
     Read::Done(Outcome::Answered {
-      hits, elapsed_ms, ..
+      found, elapsed_ms, ..
     }) => Outcome::Answered {
-      hits,
+      found,
       elapsed_ms,
       remedy: Some(remedy),
       diagnosis: Some(diagnosis),
@@ -740,6 +793,34 @@ pub fn kept_hits(hits: Vec<EngineHit>) -> Vec<EngineHit> {
     .into_iter()
     .filter(|hit| !hit.title.is_empty() && web_address(&hit.url) && seen.insert(hit.url.clone()))
     .collect()
+}
+
+/// Pictures as an engine's API listed them, each needing a direct web address, and never the same address
+/// twice.
+pub fn kept_images(images: Vec<EngineImage>) -> Vec<EngineImage> {
+  let mut seen = HashSet::new();
+
+  images
+    .into_iter()
+    .filter(|image| web_address(&image.url) && seen.insert(image.url.clone()))
+    .collect()
+}
+
+/// A JSON value's text, where it is a non-empty string: the text of the markup it may carry.
+pub fn text_where(value: &Value) -> Option<String> {
+  let text = text(value);
+
+  (!text.is_empty()).then_some(text)
+}
+
+/// A JSON value's string as it stands, where it is a non-empty string.
+pub fn string_where(value: &Value) -> Option<String> {
+  value.as_str().map(str::trim).filter(|text| !text.is_empty()).map(str::to_owned)
+}
+
+/// A JSON value's number as a pixel count.
+pub fn pixels(value: &Value) -> Option<u32> {
+  value.as_u64().and_then(|count| u32::try_from(count).ok())
 }
 
 /// A JSON value's text: a string read as the text of the markup it may carry, nothing for anything else.

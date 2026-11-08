@@ -1,6 +1,7 @@
 # The explorer entries (docs/api.md, 「The explorer entries」): what a caller of the tool host reads of the web — a
-# raster picture, a page's head and the search engines' states — through the web layer's checks. Each is for the system alone, reached by the tool host's POST /tool-calls. The repository's tools test holds
-# every entry here to the tool answering it.
+# raster picture, a page's head, the search engines' states and a picture search with its licence fields —
+# through the web layer's checks. Each is for the system alone, reached by the tool host's POST /tool-calls. The
+# repository's tools test holds every entry here to the tool answering it.
 
 [tool]
 name = "explorer"
@@ -33,5 +34,14 @@ name = "search_engines"
 description = "Answers each search engine a search may query, in the roster's order, with its state as it was last seen, and how long an engine rests for each kind of refusal."
 input = "search_engines.json"
 output = "search_engines.output.json"
+hints = { read_only = true, open_world = true }
+system = true
+
+[[entry]]
+namespace = "explorer"
+name = "search_images"
+description = "Asks the image search engines directly and answers each picture as fields rather than a snippet: its direct address, the page it stands on, title, creator, publisher, pixel dimensions, media type and licence, each as the source states it and null where it states none."
+input = "search_images.json"
+output = "search_images.output.json"
 hints = { read_only = true, open_world = true }
 system = true
