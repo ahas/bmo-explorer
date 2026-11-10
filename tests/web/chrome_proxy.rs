@@ -131,7 +131,7 @@ fn chrome_is_told_the_proxy_is_its_only_road() {
   assert_eq!(
     chrome_arguments(9),
     [
-      "--proxy-server=http://127.0.0.1:9",
+      "--proxy-server=http://[::1]:9",
       "--proxy-bypass-list=<-loopback>",
       "--force-webrtc-ip-handling-policy=disable_non_proxied_udp"
     ]

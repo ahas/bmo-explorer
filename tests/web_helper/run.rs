@@ -42,7 +42,7 @@ fn what_a_run_is_held_to_is_read_off_its_record_s_label() {
       "role": "researcher",
       "source": "search",
       "chat": -5,
-      "branchesAt": "http://127.0.0.1:1/",
+      "branchesAt": "http://[::1]:1/",
       "branchesToken": "a-token",
       "owner": "search-run:7",
     },
@@ -58,7 +58,7 @@ fn what_a_run_is_held_to_is_read_off_its_record_s_label() {
       pages: Some(8),
       run: Some(7),
       branch_of: None,
-      branches_at: Some("http://127.0.0.1:1/".into()),
+      branches_at: Some("http://[::1]:1/".into()),
       branches_token: Some("a-token".into()),
     })
   );
