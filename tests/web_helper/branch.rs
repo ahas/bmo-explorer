@@ -267,7 +267,7 @@ async fn any_other_answer_is_a_failure() {
 
   assert!(answer.starts_with("BRANCH FAILED: the research unit's answer to POST /branches does not read"));
 
-  let closed = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+  let closed = tokio::net::TcpListener::bind("[::1]:0").await.unwrap();
   let at = format!("http://{}", closed.local_addr().unwrap());
 
   drop(closed);
