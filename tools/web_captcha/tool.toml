@@ -1,6 +1,6 @@
-# The forcing read: one page in the real browser with a CAPTCHA or browser challenge met on the way attempted
-# once (docs/web-access.md, 「When the browser meets a challenge」). The repository's tools test holds the entry
-# here to the tool answering it.
+# The forcing read: one page in the real browser with a CAPTCHA or browser challenge met on the way worked as a
+# bounded loop of rounds (docs/web-access.md, 「When the browser meets a challenge」). The repository's tools
+# test holds the entry here to the tool answering it.
 
 [tool]
 name = "web_captcha"
