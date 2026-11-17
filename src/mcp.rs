@@ -160,7 +160,7 @@ pub fn tools() -> Vec<ExplorerTool> {
     ),
     tool(
       "explorer_link_preview",
-      "A link's preview as the page's head declares it: title, description, picture.",
+      "A link's preview as the page's head declares it: title, description, site name, picture.",
       "link_preview",
       link_preview,
     ),

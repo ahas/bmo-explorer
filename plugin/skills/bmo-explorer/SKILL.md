@@ -39,7 +39,8 @@ leave it.
 
 ## The other tools
 
-- `explorer_link_preview`: the `title`, `description` and `image` a page declares for its preview.
+- `explorer_link_preview`: the `title`, `description`, `siteName` and `image` a page declares for its preview,
+  read as a link previewer so a large site serves its sharing tags.
 - `explorer_fetch_page`: a page's HTML as served, with its `status` and `contentType`, at most 512 KiB, for
   reading markup a text reading drops.
 - `explorer_fetch_raster`: the picture at an address in base64 with its `mimeType`; `width` narrows a wider one

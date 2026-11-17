@@ -8,6 +8,7 @@ use base64::Engine;
 use bmo_explorer::client::{Explorer, ImageSearchInput, RasterInput, WebSearchInput};
 use bmo_explorer::web::browser::{BrowserDocument, BrowserFetcher};
 use bmo_explorer::web::clock::StandingClock;
+use bmo_explorer::web::identity::PREVIEWER_AGENT;
 use bmo_explorer::web::pacing::MemoryPacing;
 use bmo_explorer::web::session::{SessionParts, WebSession};
 
@@ -88,6 +89,47 @@ async fn a_preview_is_what_the_head_declares_for_one() {
   assert_eq!(preview.title.as_deref(), Some("The article, as shared"));
   assert_eq!(preview.description.as_deref(), Some("What it says, in a line."));
   assert_eq!(preview.image.as_deref(), Some("https://site.test/pictures/cover.png"));
+}
+
+// A page as a large site serves it: its sharing tags only to an agent it knows as a link previewer, and to any
+// other a head that names nothing.
+const SHARED_TO_PREVIEWERS: &str = r#"<html><head><title>  A   video </title>
+<meta property="og:title" content="The video, as shared">
+<meta property="og:site_name" content="Videos">
+<meta property="og:image" content="https://pictures.test/cover.jpg">
+</head><body></body></html>"#;
+
+#[tokio::test]
+async fn a_preview_is_read_as_a_link_previewer_and_answers_the_site_s_name() {
+  let (client, web, _) = client(Web::default().route("video.test", |asked| {
+    if asked.user_agent.starts_with("facebookexternalhit/1.1") {
+      html(SHARED_TO_PREVIEWERS)
+    } else {
+      html("<html><head><script>var big = 1;</script></head><body></body></html>")
+    }
+  }));
+  let preview = client.link_preview("https://video.test/watch").await.unwrap();
+
+  assert_eq!(web.asked()[0].user_agent, PREVIEWER_AGENT);
+  assert_eq!(preview.title.as_deref(), Some("The video, as shared"));
+  assert_eq!(preview.site_name.as_deref(), Some("Videos"));
+  assert_eq!(preview.image.as_deref(), Some("https://pictures.test/cover.jpg"));
+}
+
+#[tokio::test]
+async fn a_preview_s_long_texts_are_cut_with_an_ellipsis() {
+  let page = format!(
+    r#"<html><head><meta property="og:title" content="{}"><meta name="description" content="{}"></head></html>"#,
+    "t".repeat(400),
+    "d".repeat(700)
+  );
+  let (client, ..) = client(Web::default().route("long.test", move |_| html(&page)));
+  let preview = client.link_preview("https://long.test/").await.unwrap();
+  let title = preview.title.unwrap();
+  let description = preview.description.unwrap();
+
+  assert_eq!((title.chars().count(), description.chars().count()), (300, 600));
+  assert!(title.ends_with('\u{2026}') && description.ends_with('\u{2026}'));
 }
 
 #[tokio::test]

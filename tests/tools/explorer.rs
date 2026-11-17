@@ -3,7 +3,9 @@ use std::path::Path;
 use bmo_explorer::store;
 use bmo_explorer::tool::manifest::Manifest;
 use bmo_explorer::tool::{Answer, DATA_ROOT_VARIABLE, Served, Session};
-use bmo_explorer::tools::explorer::{EnginesOutput, FetchPage, FetchRaster, Paced, SearchEngines, TOOLS};
+use bmo_explorer::tools::explorer::{
+  EnginesOutput, FetchPage, FetchRaster, Paced, PreviewLink, SearchEngines, TOOLS,
+};
 use bmo_explorer::web::pacing::{EngineHealth, EngineState, Pacing, StorePacing};
 use bmo_explorer::web::search::roster::ROSTER;
 use serde_json::json;
@@ -66,7 +68,8 @@ async fn the_engines_come_in_the_roster_s_order_with_their_last_state_and_the_re
 }
 
 #[tokio::test]
-async fn a_page_head_and_a_picture_are_refused_an_address_inside_this_network_before_anything_is_sent() {
+async fn a_page_head_a_preview_and_a_picture_are_refused_an_address_inside_this_network_before_anything_is_sent()
+ {
   let root = tempfile::tempdir().unwrap();
   let session = session(root.path());
   let asked = json!({
@@ -76,7 +79,12 @@ async fn a_page_head_and_a_picture_are_refused_an_address_inside_this_network_be
 
   for answer in [
     FetchPage.call(&session, asked.clone()).await.unwrap(),
+    PreviewLink.call(&session, asked.clone()).await.unwrap(),
     FetchRaster.call(&session, asked.clone()).await.unwrap(),
+    FetchRaster
+      .call(&session, json!({ "address": asked["address"], "pacing": "search:7", "square": 240 }))
+      .await
+      .unwrap(),
   ] {
     let Answer { is_error, .. } = answer.clone();
 
@@ -97,4 +105,14 @@ async fn one_pacing_name_s_requests_are_paced_together_and_apart_from_another_s(
   assert_eq!(one.reserve("page:example.org", 250, 1_000).await.unwrap(), 1_000);
   assert_eq!(one.reserve("page:example.org", 250, 1_000).await.unwrap(), 1_250);
   assert_eq!(other.reserve("page:example.org", 250, 1_000).await.unwrap(), 1_000);
+}
+
+#[tokio::test]
+async fn a_card_s_square_of_no_pixels_is_refused() {
+  let root = tempfile::tempdir().unwrap();
+  let asked = json!({ "address": "https://example.org/cover.jpg", "pacing": "search:7", "square": 0 });
+  let answer = FetchRaster.call(&session(root.path()), asked).await.unwrap();
+
+  assert!(answer.is_error, "{answer:?}");
+  assert_eq!(answer.plain(), "ERROR: The square is 0; it is at least 1.");
 }

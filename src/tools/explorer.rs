@@ -1,5 +1,6 @@
 //! The `explorer` entries (docs/api.md, 「The explorer entries」): what a caller of the tool host reads of the
-//! web — a raster picture, a page's head and the search engines' states — through the web layer's checks, so
+//! web — a raster picture, a page's head, a link's preview and the search engines' states — through the web
+//! layer's checks, so
 //! every outward request keeps them. Each is for the system alone: never shown to a session, and reached by the
 //! tool host's `POST /tool-calls`.
 
@@ -8,20 +9,22 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::client::{ImageSearchOutput, Licence, Picture, engine_standing, is_markup, page_head};
+use crate::client::{
+  ImageSearchOutput, Licence, LinkPreview, Picture, engine_standing, is_markup, link_preview, page_head,
+};
 use crate::store;
 use crate::tool::{Answer, Content, Hints, Served, Session, Tool};
 use crate::web::address::Check;
 use crate::web::client::{decode, network};
 use crate::web::jar::StoredCookie;
 use crate::web::pacing::{Boxed, EngineHealth, Pacing, Recipe, StorePacing};
-use crate::web::picture::fetch_raster;
+use crate::web::picture::{fetch_raster, raster};
 use crate::web::search::{
   DEFAULT_SEARCH_COUNT, MAX_SEARCH_COUNT, Search, SearchRoads, image_engines_named, search_images,
 };
 
 /// Every entry the executable answers, as its manifest declares them.
-pub const TOOLS: &[&dyn Served] = &[&FetchRaster, &FetchPage, &SearchEngines, &SearchImages];
+pub const TOOLS: &[&dyn Served] = &[&FetchRaster, &FetchPage, &PreviewLink, &SearchEngines, &SearchImages];
 
 // Each reads the web and changes nothing on this machine.
 const READS: Hints = Hints {
@@ -130,36 +133,69 @@ pub struct PacedInput {
   pacing: String,
 }
 
+#[derive(Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RasterInput {
+  /// The address.
+  address: String,
+  /// Whose requests are paced together: one name for each run's reading.
+  pacing: String,
+  /// A card's square, in pixels on a side: the picture is cut to a square from its middle, brought to at most
+  /// this, never enlarged, and answered as JPEG; the picture as served where absent.
+  #[serde(default)]
+  square: Option<u32>,
+}
+
+/// The quality a card's picture is written at, on the JPEG encoder's scale of 1 to 100.
+const CARD_QUALITY: u8 = 85;
+
 /// The raster picture behind an address.
 pub struct FetchRaster;
 
 impl Tool for FetchRaster {
   const NAME: &'static str = "fetch_raster";
   const NAMESPACE: &'static str = "explorer";
-  const DESCRIPTION: &'static str = "Fetches the raster picture behind an address by the checked direct road, paced per host under the pacing name given, and answers it as one image.";
+  const DESCRIPTION: &'static str = "Fetches the raster picture behind an address by the checked direct road, paced per host under the pacing name given, and answers it as one image: as served, or where a square is named, cut to that square from its middle as a card's picture.";
   const HINTS: Hints = READS;
   const CAPABILITIES: &'static [&'static str] = &[];
   const SYSTEM: bool = true;
 
-  type Input = PacedInput;
+  type Input = RasterInput;
 
-  async fn call(&self, session: &Session, input: PacedInput) -> Answer {
+  async fn call(&self, session: &Session, input: RasterInput) -> Answer {
+    if input.square == Some(0) {
+      return Answer::refusal("ERROR: The square is 0; it is at least 1.");
+    }
+
     let pacing = match paced(session, &input.pacing) {
       Ok(pacing) => pacing,
       Err(refused) => return refused,
     };
+    let image = match fetch_raster(&input.address, &pacing, &Check::default(), &*network()).await {
+      Ok(image) => image,
+      Err(why) => return Answer::refusal(format!("ERROR: {}", why.message)),
+    };
 
-    match fetch_raster(&input.address, &pacing, &Check::default(), &*network()).await {
-      Ok(image) => Answer {
-        content: vec![Content::Image {
-          data: base64::engine::general_purpose::STANDARD.encode(&image.bytes),
-          mime_type: image.kind.to_owned(),
-        }],
-        is_error: false,
-        structured: None,
+    match input.square {
+      None => image_answer(&image.bytes, image.kind),
+      Some(edge) => match raster::card(&image.bytes, edge, CARD_QUALITY) {
+        Ok(card) => image_answer(&card.jpeg, "image/jpeg"),
+        Err(why) => {
+          Answer::refusal(format!("ERROR: The picture at {} does not read: {why}", input.address))
+        }
       },
-      Err(why) => Answer::refusal(format!("ERROR: {}", why.message)),
     }
+  }
+}
+
+fn image_answer(bytes: &[u8], kind: &str) -> Answer {
+  Answer {
+    content: vec![Content::Image {
+      data: base64::engine::general_purpose::STANDARD.encode(bytes),
+      mime_type: kind.to_owned(),
+    }],
+    is_error: false,
+    structured: None,
   }
 }
 
@@ -212,6 +248,36 @@ impl Tool for FetchPage {
       url: read.url,
       kind: read.raw_content_type,
     })
+  }
+}
+
+/// A link's preview, read as a link previewer, for a card that shows it.
+pub struct PreviewLink;
+
+impl Tool for PreviewLink {
+  const NAME: &'static str = "link_preview";
+  const NAMESPACE: &'static str = "explorer";
+  const DESCRIPTION: &'static str = "Reads a page directly as a link previewer, checking the address and each redirect and reading at most 512 KiB of it, and answers what its head declares for a preview: the address it ended at, title, description, site name and picture address, each null where it declares none.";
+  const HINTS: Hints = READS;
+  const CAPABILITIES: &'static [&'static str] = &[];
+  const SYSTEM: bool = true;
+
+  type Input = PacedInput;
+
+  fn output_schema() -> Option<Value> {
+    Some(schema::<LinkPreview>())
+  }
+
+  async fn call(&self, session: &Session, input: PacedInput) -> Answer {
+    let pacing = match paced(session, &input.pacing) {
+      Ok(pacing) => pacing,
+      Err(refused) => return refused,
+    };
+
+    match link_preview(&input.address, &pacing, &Check::default(), &*network()).await {
+      Ok(preview) => structured(&preview),
+      Err(why) => Answer::refusal(format!("ERROR: {}", why.error)),
+    }
   }
 }
 

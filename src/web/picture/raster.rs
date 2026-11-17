@@ -1,5 +1,5 @@
 //! A raster picture read and redrawn to be looked at: the type its own first bytes say it is, and the picture
-//! upright, laid on white and fitted inside an edge as JPEG. The `image` crate reads every format but AVIF; an
+//! upright, laid on white and fitted inside an edge, or cut to a card's square, as JPEG. The `image` crate reads every format but AVIF; an
 //! AVIF picture is read by `avif`, since no maintained crate decodes one to pixels without a system library.
 
 use std::io::Cursor;
@@ -121,7 +121,9 @@ pub struct Fitted {
 /// The picture upright, fitted inside a square of `edge` pixels and never enlarged, laid on white and written
 /// as JPEG at a quality on the encoder's scale of 1 to 100.
 pub fn fitted(bytes: &[u8], edge: u32, quality: u8) -> Result<Fitted, NotAPicture> {
-  redrawn(bytes, quality, |width, height| inside(width, height, edge))
+  redrawn(bytes, quality, |width, height| {
+    Framing::whole(width, height, inside(width, height, edge))
+  })
 }
 
 /// The size a picture is brought to `limit` pixels wide at, its sides in proportion, never larger than it stands.
@@ -139,23 +141,67 @@ pub fn narrowed(width: u32, height: u32, limit: u32) -> (u32, u32) {
 /// JPEG at a quality on the encoder's scale of 1 to 100.
 pub fn fitted_to_width(bytes: &[u8], width: u32, quality: u8) -> Result<Fitted, NotAPicture> {
   redrawn(bytes, quality, |source_width, source_height| {
-    narrowed(source_width, source_height, width)
+    Framing::whole(source_width, source_height, narrowed(source_width, source_height, width))
   })
+}
+
+/// The part of a picture a redrawing keeps and the size it is brought to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Framing {
+  /// The kept part's left and top edges and its width and height, in the picture's own pixels.
+  pub cut: (u32, u32, u32, u32),
+  /// The width and height the kept part is brought to.
+  pub size: (u32, u32),
+}
+
+impl Framing {
+  fn whole(width: u32, height: u32, size: (u32, u32)) -> Self {
+    Self {
+      cut: (0, 0, width, height),
+      size,
+    }
+  }
+}
+
+/// The square cut from a picture's middle on its short side, brought to at most `limit` pixels on a side and
+/// never larger than it stands.
+pub fn squared(width: u32, height: u32, limit: u32) -> Framing {
+  let side = width.min(height);
+  let brought = side.min(limit);
+
+  Framing {
+    cut: ((width - side) / 2, (height - side) / 2, side, side),
+    size: (brought, brought),
+  }
+}
+
+/// The picture upright, laid on white, cut to a square from its middle and brought to at most `edge` pixels on a
+/// side, never enlarged, written as JPEG at a quality on the encoder's scale of 1 to 100: a card's picture.
+pub fn card(bytes: &[u8], edge: u32, quality: u8) -> Result<Fitted, NotAPicture> {
+  redrawn(bytes, quality, |width, height| squared(width, height, edge))
 }
 
 fn redrawn(
   bytes: &[u8],
   quality: u8,
-  size: impl Fn(u32, u32) -> (u32, u32),
+  framing: impl Fn(u32, u32) -> Framing,
 ) -> Result<Fitted, NotAPicture> {
   let picture = decode(bytes)?;
   let (source_width, source_height) = (picture.width(), picture.height());
   let laid = on_white(&picture);
-  let (width, height) = size(source_width, source_height);
-  let brought = if (width, height) == laid.dimensions() {
+  let Framing {
+    cut: (left, top, cut_width, cut_height),
+    size: (width, height),
+  } = framing(source_width, source_height);
+  let kept = if (left, top, cut_width, cut_height) == (0, 0, source_width, source_height) {
     laid
   } else {
-    image::imageops::resize(&laid, width, height, FilterType::Lanczos3)
+    image::imageops::crop_imm(&laid, left, top, cut_width, cut_height).to_image()
+  };
+  let brought = if (width, height) == kept.dimensions() {
+    kept
+  } else {
+    image::imageops::resize(&kept, width, height, FilterType::Lanczos3)
   };
 
   Ok(Fitted {

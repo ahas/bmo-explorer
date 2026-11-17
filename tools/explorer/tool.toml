@@ -1,7 +1,7 @@
 # The explorer entries (docs/api.md, 「The explorer entries」): what a caller of the tool host reads of the web — a
-# raster picture, a page's head, the search engines' states and a picture search with its licence fields —
-# through the web layer's checks. Each is for the system alone, reached by the tool host's POST /tool-calls. The
-# repository's tools test holds every entry here to the tool answering it.
+# raster picture, a page's head, a link's preview, the search engines' states and a picture search with its
+# licence fields — through the web layer's checks. Each is for the system alone, reached by the tool host's
+# POST /tool-calls. The repository's tools test holds every entry here to the tool answering it.
 
 [tool]
 name = "explorer"
@@ -14,8 +14,8 @@ run = ["explorer-tool"]
 [[entry]]
 namespace = "explorer"
 name = "fetch_raster"
-description = "Fetches the raster picture behind an address by the checked direct road, paced per host under the pacing name given, and answers it as one image."
-input = "paced.json"
+description = "Fetches the raster picture behind an address by the checked direct road, paced per host under the pacing name given, and answers it as one image: as served, or where a square is named, cut to that square from its middle as a card's picture."
+input = "raster.json"
 hints = { read_only = true, open_world = true }
 system = true
 
@@ -25,6 +25,15 @@ name = "fetch_page"
 description = "Fetches a page directly, checking the address and each redirect, and reads at most 512 KiB of it: the address it ended at, its content type, and its markup decoded as its charset says."
 input = "paced.json"
 output = "fetch_page.output.json"
+hints = { read_only = true, open_world = true }
+system = true
+
+[[entry]]
+namespace = "explorer"
+name = "link_preview"
+description = "Reads a page directly as a link previewer, checking the address and each redirect and reading at most 512 KiB of it, and answers what its head declares for a preview: the address it ended at, title, description, site name and picture address, each null where it declares none."
+input = "paced.json"
+output = "link_preview.output.json"
 hints = { read_only = true, open_world = true }
 system = true
 

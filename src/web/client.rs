@@ -14,7 +14,7 @@ use url::Url;
 
 use crate::web::address::{Check, SafeTarget, host_of};
 use crate::web::error::{Failure, WebError, WebResult};
-use crate::web::identity::{self, FetchSite, Identity};
+use crate::web::identity::{self, FetchSite, Presentation};
 use crate::web::jar::Jar;
 use crate::web::pacing::{Pacing, wait_for_host};
 
@@ -118,7 +118,7 @@ pub struct Direct<'a> {
   pub interval_ms: u64,
   /// Headers of the caller's own, which never replace the browser's.
   pub headers: Vec<(String, String)>,
-  pub identity: Identity,
+  pub presentation: Presentation,
   pub byte_cap: usize,
 }
 
@@ -136,7 +136,7 @@ impl<'a> Direct<'a> {
       transport,
       interval_ms: DIRECT_HOST_INTERVAL_MS,
       headers: Vec::new(),
-      identity: identity::DEFAULT,
+      presentation: Presentation::Browser(identity::DEFAULT),
       byte_cap: DIRECT_BYTE_CAP,
     }
   }
@@ -252,7 +252,7 @@ impl Direct<'_> {
       let site = fetch_site(&first, previous.as_ref(), &current);
       let mut headers = HeaderMap::new();
 
-      for (name, value) in identity::navigation_headers(site, self.identity) {
+      for (name, value) in self.presentation.headers(site) {
         if let Ok(value) = HeaderValue::from_str(&value) {
           headers.insert(name, value);
         }
@@ -275,7 +275,6 @@ impl Direct<'_> {
             headers.remove(name);
           }
 
-          headers.insert("sec-fetch-site", HeaderValue::from_static(site.header()));
           if let Ok(referer) = HeaderValue::from_str(&format!("{}/", origin_of(previous))) {
             headers.insert("referer", referer);
           }

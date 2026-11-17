@@ -17,6 +17,7 @@ use crate::forms::text::squeeze;
 use crate::store;
 use crate::web::address::Check;
 use crate::web::client::{DIRECT_HOST_INTERVAL_MS, Direct, DirectBytes, Transport, decode, network};
+use crate::web::identity::Presentation;
 use crate::web::jar::Jar;
 use crate::web::pacing::{Pacing, StorePacing};
 use crate::web::picture::{fetch_raster, raster};
@@ -35,6 +36,10 @@ pub const PAGE_HEAD_BYTES: usize = 512 * 1024;
 
 /// Between two requests for a page's head to one host.
 pub const PAGE_HEAD_HOST_INTERVAL_MS: u64 = 250;
+
+/// The most characters a preview's title and site name are answered in, and its description.
+const PREVIEW_TITLE_CHARS: usize = 300;
+const PREVIEW_DESCRIPTION_CHARS: usize = 600;
 
 /// The quality a picture narrowed to a width is written at, on the JPEG encoder's scale of 1 to 100.
 const NARROWED_QUALITY: u8 = 85;
@@ -209,6 +214,8 @@ pub struct LinkPreview {
   pub url: String,
   pub title: Option<String>,
   pub description: Option<String>,
+  /// The site's own name for itself, as its Open Graph tags declare it.
+  pub site_name: Option<String>,
   /// The preview picture's absolute address.
   pub image: Option<String>,
 }
@@ -470,43 +477,7 @@ impl Explorer {
 
   /// A link's preview as the page's head declares it.
   pub async fn link_preview(&self, url: &str) -> Result<LinkPreview, ClientError> {
-    let read = self.head(url).await?;
-
-    if !(200..300).contains(&read.status) {
-      return Err(ClientError::new("upstream-failed", format!("HTTP {} for {}", read.status, read.url)));
-    }
-
-    if !is_markup(&read) {
-      return Ok(LinkPreview {
-        url: read.url,
-        title: None,
-        description: None,
-        image: None,
-      });
-    }
-
-    let page = Html::parse_document(&decode(&read.bytes, &read.raw_content_type));
-    let title = declared_in(&page, &["og:title", "twitter:title"]).or_else(|| {
-      page
-        .select(&TITLE)
-        .next()
-        .map(|title| squeeze(&title.text().collect::<String>()))
-        .filter(|title| !title.is_empty())
-    });
-    let description = declared_in(&page, &["og:description", "twitter:description", "description"]);
-    let image = declared_in(
-      &page,
-      &["og:image", "og:image:url", "og:image:secure_url", "twitter:image", "twitter:image:src"],
-    )
-    .or_else(|| page.select(&IMAGE_SOURCE).find_map(|link| link.value().attr("href").map(str::to_owned)))
-    .and_then(|image| absolute(&read.url, &image));
-
-    Ok(LinkPreview {
-      url: read.url,
-      title,
-      description,
-      image,
-    })
+    link_preview(url, &**self.session.store(), self.session.check(), &**self.session.transport()).await
   }
 
   /// A page's markup as it was served, whatever its status.
@@ -590,6 +561,76 @@ pub async fn page_head(
   direct.interval_ms = PAGE_HEAD_HOST_INTERVAL_MS;
   direct.byte_cap = PAGE_HEAD_BYTES;
   direct.bytes(url).await
+}
+
+/// A link's preview as the page's head declares it, read as a link previewer (docs/api.md, 「The MCP server」):
+/// the address checked and each redirect, at most 512 KiB of it, paced per host.
+pub async fn link_preview(
+  url: &str,
+  store: &dyn Pacing,
+  check: &Check,
+  transport: &dyn Transport,
+) -> Result<LinkPreview, ClientError> {
+  let jar = tokio::sync::Mutex::new(Jar::default());
+  let mut direct = Direct::new(store, &jar, check, transport);
+
+  direct.interval_ms = PAGE_HEAD_HOST_INTERVAL_MS;
+  direct.byte_cap = PAGE_HEAD_BYTES;
+  direct.presentation = Presentation::Previewer;
+
+  let read = direct.bytes(url).await?;
+
+  if !(200..300).contains(&read.status) {
+    return Err(ClientError::new("upstream-failed", format!("HTTP {} for {}", read.status, read.url)));
+  }
+
+  if !is_markup(&read) {
+    return Ok(LinkPreview {
+      url: read.url,
+      title: None,
+      description: None,
+      site_name: None,
+      image: None,
+    });
+  }
+
+  let page = Html::parse_document(&decode(&read.bytes, &read.raw_content_type));
+  let title = declared_in(&page, &["og:title", "twitter:title"]).or_else(|| {
+    page
+      .select(&TITLE)
+      .next()
+      .map(|title| squeeze(&title.text().collect::<String>()))
+      .filter(|title| !title.is_empty())
+  });
+  let description = declared_in(&page, &["og:description", "twitter:description", "description"]);
+  let site_name = declared_in(&page, &["og:site_name"]);
+  let image = declared_in(
+    &page,
+    &["og:image", "og:image:url", "og:image:secure_url", "twitter:image", "twitter:image:src"],
+  )
+  .or_else(|| page.select(&IMAGE_SOURCE).find_map(|link| link.value().attr("href").map(str::to_owned)))
+  .and_then(|image| absolute(&read.url, &image));
+
+  Ok(LinkPreview {
+    url: read.url,
+    title: title.map(|title| shortened(title, PREVIEW_TITLE_CHARS)),
+    description: description.map(|description| shortened(description, PREVIEW_DESCRIPTION_CHARS)),
+    site_name: site_name.map(|name| shortened(name, PREVIEW_TITLE_CHARS)),
+    image,
+  })
+}
+
+// The text as it stands where it holds at most `most` characters, else its first ones and an ellipsis, `most`
+// in all.
+fn shortened(text: String, most: usize) -> String {
+  if text.chars().count() <= most {
+    return text;
+  }
+
+  let mut cut: String = text.chars().take(most - 1).collect();
+
+  cut.push('\u{2026}');
+  cut
 }
 
 /// Whether a read is markup: a page that is not — a PDF, a raw source file — has no head to read.

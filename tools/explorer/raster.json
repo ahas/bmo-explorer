@@ -1,0 +1,28 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "address": {
+      "description": "The address.",
+      "type": "string"
+    },
+    "pacing": {
+      "description": "Whose requests are paced together: one name for each run's reading.",
+      "type": "string"
+    },
+    "square": {
+      "default": null,
+      "description": "A card's square, in pixels on a side: the picture is cut to a square from its middle, brought to at most\nthis, never enlarged, and answered as JPEG; the picture as served where absent.",
+      "format": "uint32",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "address",
+    "pacing"
+  ],
+  "type": "object"
+}

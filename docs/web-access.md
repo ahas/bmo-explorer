@@ -43,11 +43,16 @@
   - Sent with them: `Accept`, `Accept-Language` (`ko-KR`, `ko`, `en-US`, `en`), `Accept-Encoding`,
     `Sec-Fetch-*`, and the upgrade and priority headers.
 - **Who uses which:**
-  - Page fetches use the Linux desktop identity.
+  - Page fetches use the Linux desktop identity, but for a link preview's read (below).
   - A search engine keeps one identity, written in its recipe, and moves to the next only when a
     block is diagnosed as the client's shape. Changing identity per request would contradict the
     cookies the engine carries.
-- **No product or crawler tag** is added after the product name.
+- **No product or crawler tag** is added after a browser identity's product name.
+- **A link preview's page read presents itself as a link previewer,** not as a browser:
+  `User-Agent: facebookexternalhit/1.1 (compatible; link-preview)`, with `Accept`, `Accept-Language` and
+  `Accept-Encoding` alone, and no client hints or `Sec-Fetch-*`. Large sites recognise that agent and serve it a
+  page whose sharing tags stand in its first bytes; a browser is served a page whose head runs past the 512 KiB
+  a preview reads, so a video page answered to a browser declares no title or picture within it.
 - **Not a fingerprint patch:** an identity is the HTTP presentation an ordinary browser sends. Where a
   site checks more than the request shows, the answer is the real browser road, which presents itself as
   that browser does (「Which browser」).

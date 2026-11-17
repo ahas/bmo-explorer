@@ -1,6 +1,6 @@
-//! The browsers a direct read speaks as (docs/web-access.md, 「Identities and headers」): each one stable
-//! Chrome of the installed major version, whose user agent and three client hints are one statement about
-//! one browser and are only ever set together.
+//! What a direct read presents itself as (docs/web-access.md, 「Identities and headers」): one of the browsers,
+//! each one stable Chrome of the installed major version, whose user agent and three client hints are one
+//! statement about one browser and are only ever set together; or a link previewer, for a link preview's page.
 
 /// The installed Chrome's major version, which every identity names.
 pub const CHROME_MAJOR: u32 = 151;
@@ -103,4 +103,32 @@ pub fn navigation_headers(site: FetchSite, identity: Identity) -> Vec<(&'static 
     ("upgrade-insecure-requests", "1".into()),
     ("user-agent", identity.user_agent.into()),
   ]
+}
+
+/// The agent a link previewer sends: the one large sites recognise as a previewer and serve a page whose sharing
+/// tags stand in its first bytes, followed by what this reader is.
+pub const PREVIEWER_AGENT: &str = "facebookexternalhit/1.1 (compatible; link-preview)";
+
+/// What one direct request presents itself as.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Presentation {
+  /// A browser's top-level navigation, as the identity's Chrome sends it.
+  Browser(Identity),
+  /// A link previewer reading a page's head: its agent and what it accepts, and no browser's hints.
+  Previewer,
+}
+
+impl Presentation {
+  /// The headers a request presented so sends, by their lower-case names.
+  pub fn headers(self, site: FetchSite) -> Vec<(&'static str, String)> {
+    match self {
+      Self::Browser(identity) => navigation_headers(site, identity),
+      Self::Previewer => vec![
+        ("accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.5".into()),
+        ("accept-encoding", "gzip, deflate, br, zstd".into()),
+        ("accept-language", "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7".into()),
+        ("user-agent", PREVIEWER_AGENT.into()),
+      ],
+    }
+  }
 }

@@ -19,7 +19,7 @@ use crate::web::browser::BrowserDocument;
 use crate::web::classify::{Disposition, Fetched, classify};
 use crate::web::client::{Direct, Transport};
 use crate::web::error::{Failure, WebError, WebResult};
-use crate::web::identity;
+use crate::web::identity::{self, Presentation};
 use crate::web::jar::Jar;
 use crate::web::pacing::{Pacing, Recipe, Route, store_failure, wait_for_host};
 
@@ -515,7 +515,7 @@ pub async fn ask_engine(
 
     let mut direct = Direct::new(store, &jar, roads.check, roads.transport);
 
-    direct.identity = identity::named(Some(&held.identity));
+    direct.presentation = Presentation::Browser(identity::named(Some(&held.identity)));
     direct.byte_cap = ENGINE_BYTE_CAP;
 
     if held.warm_up

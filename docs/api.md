@@ -81,7 +81,7 @@ flowchart TD
 | `explorer_web_search` | `web_search` | `q`; `engines`, each an engine's roster name or a category standing for its engines, none for the general ones; `limit?`, 1 to 30, 10 where absent; `language?` | `hits`, each `title`, `url`, `snippet` and `engine`, mixed one from each engine in turn; `unresponsive` and `offTopic`, the engines that did not answer or answered off the query, each with why |
 | `explorer_search_images` | `search_images` | `q`; `engines`, each an image engine's roster name or a category standing for its image engines, none for every image engine; `limit?`, 1 to 30, 10 where absent; `language?` | `images`, each `url`, `pageUrl`, `title`, `creator`, `publisher`, `width`, `height`, `mediaType`, `licence` and `engine`, mixed one from each engine in turn; `unresponsive` and `offTopic` as the text search's |
 | `explorer_web_fetch` | `web_fetch` | `url` | `url`, the address the read ended at; `title`, null where the page has none; `text`, what a reader sees, at most 100,000 characters; `links`, every address the page links to once, absolute; `truncated`, true where the text was cut |
-| `explorer_link_preview` | `link_preview` | `url` | `url`; `title`, `description` and `image` as the page's head declares them for a preview, each null where it declares none |
+| `explorer_link_preview` | `link_preview` | `url` | `url`; `title`, `description`, `siteName` and `image` as the page's head declares them for a preview, each null where it declares none |
 | `explorer_fetch_page` | `fetch_page` | `url` | `url`; `status`; `contentType`, as the server sent it; `html`, at most 512 KiB of the markup decoded as its charset says |
 | `explorer_fetch_raster` | `fetch_raster` | `url`; `width?` | `image`, the picture's bytes in base64, and `mimeType`: the picture as served, or where `width` is named and the picture is wider, redrawn as JPEG that wide |
 | `explorer_search_engines` | `search_engines` | nothing | `engines`, in the roster's order, each `name`, `category`, `koreanNative`, `state` (`unknown` where it has not been read) and `reason?`, `observedAt?`, `suspendedUntil?`, `elapsedMs?` and `resultCount?`; `cooldowns`, each a `reason` and the `restMs` an engine rests for it |
@@ -100,6 +100,13 @@ flowchart TD
   claims is a tool host's (docs/site-contract.md, 「A page a tool claims」), and the MCP server has none.
 - **`explorer_link_preview` and `explorer_fetch_page` read the page directly,** checking the address and each
   redirect, at most 512 KiB of it, paced 250 ms apart per host.
+- **`explorer_link_preview` reads as a link previewer** (docs/web-access.md, 「Identities and headers」), so a
+  site serves it the page whose sharing tags stand in its first bytes. `title` is the Open Graph or Twitter
+  title, else the document's title; `description` the Open Graph, Twitter or meta description; `siteName` the
+  Open Graph site name; `image` the Open Graph or Twitter picture, else the page's `image_src` link, made absolute
+  against the address the read ended at and kept only where it is a web address. Each text has its runs of
+  blanks made one space, and is cut with an ellipsis at 300 characters, 600 for `description`. A page that is not
+  markup answers its address with every other field null; an answer that is not a success is `upstream-failed`.
 - **`explorer_fetch_raster`** reads a JPEG, PNG, GIF, WebP, AVIF or TIFF picture of at most 5 MiB.
 - **A call waits for its answer,** bounded by no clock (docs/web-access.md, 「A read its caller lets go of」);
   a harness that cancels a call drops its read.
@@ -122,7 +129,7 @@ under way that it would cut (the receiver's `docs/boundary-api.md`, 「The servi
 | `tools/web_search` | `web/web_search` | `web.read` | Asks the search engines directly and answers their hits as they came (docs/web-access.md) |
 | `tools/web_fetch` | `web/web_fetch` | `web.read` | Reads one page, answered by the site tool that claims its address where the record holds one (docs/site-contract.md, 「A page a tool claims」) |
 | `tools/research` | `web/research` | `web.branches` | Opens one research branch over an angle and answers its notes once it has ended (「The research branch」) |
-| `tools/explorer` | `explorer/fetch_raster`, `explorer/fetch_page`, `explorer/search_engines`, `explorer/search_images` | none: for the system alone | A picture, a page's head, the engines' states and a picture search with its licence fields (below) |
+| `tools/explorer` | `explorer/fetch_raster`, `explorer/fetch_page`, `explorer/link_preview`, `explorer/search_engines`, `explorer/search_images` | none: for the system alone | A picture, a page's head, a link's preview, the engines' states and a picture search with its licence fields (below) |
 | `tools/_shared/web` | the shared helper `web` | | One record's web reading, which `web_search`, `web_fetch`, `research` and every placed site tool ask on its socket |
 
 - **`web_search`, `web_fetch` and `research` name the helper `web`** among their shared helpers, and so does
@@ -149,7 +156,8 @@ Of it the tools read:
 - **`capabilities`,** which decide the form a session holds an entry in, whole or its bundle's.
 - **`BMO_DATA_DIR`,** the data root: from the record's `variables`, or from the call's environment where they
   name none, which the host lays from its `--pass-env` and the record's `variablesFile`. A call of
-  `explorer/fetch_raster`, `explorer/fetch_page` or `explorer/search_engines` that finds none is refused naming
+  `explorer/fetch_raster`, `explorer/fetch_page`, `explorer/link_preview`, `explorer/search_engines` or
+  `explorer/search_images` that finds none is refused naming
   the variable, and the helper's start ends unclean naming it, which fails the call that started it.
 - **`labels.research`,** the research settings a record's web reading is held to (docs/web-access.md,
   「Settings from the session record」) and the run its research branches are asked for under (「The research
@@ -214,12 +222,19 @@ A caller asks the tool host's control socket, `POST /tool-calls` with a tool ses
 the namespace `explorer`, with a JSON body naming the entry by `namespace` and `name` and what it is handed under
 `input` (the tool host's `docs/api.md`, 「Tool calls」).
 
-- **`explorer/fetch_raster`,** handed `address` and `pacing`, fetches the raster picture behind an address. Its
-  content is one image block: the bytes in base64 under `data`, and their type under `mimeType`.
+- **`explorer/fetch_raster`,** handed `address` and `pacing`, and optionally `square`, fetches the raster picture
+  behind an address. Its content is one image block: the bytes in base64 under `data`, and their type under
+  `mimeType`. Without `square` the picture is answered as served. With it, a number of pixels of at least 1, the
+  picture is redrawn for a card: upright, laid on white, cut to a square from its middle, brought to at most
+  `square` pixels on a side and never enlarged, and answered as JPEG.
 - **`explorer/fetch_page`,** handed `address` and `pacing`, fetches the page directly, checking the address and
   each redirect, and reads at most 512 KiB of it. Its structured content carries `url`, the address after every
   redirect; `type`, the content type as the server sent it; and `html`, the page decoded as its charset says,
   where it is markup, null otherwise.
+- **`explorer/link_preview`,** handed `address` and `pacing`, reads the page as `explorer_link_preview` does,
+  as a link previewer. Its structured content is the answer `explorer_link_preview` gives: `url`, the address
+  after every redirect, and `title`, `description`, `siteName` and `image`, each null where the page declares
+  none. A page that answers anything but a success is refused with its status.
 - **`explorer/search_engines`,** handed nothing. Its structured content carries:
   - `engines`, each engine in the roster's order: `name`, `category`, `korean_native`, `state` (`unknown` where
     it has not been read), and `reason?`, `observed_at?`, `suspended_until?`, `elapsed_ms?` and
@@ -286,5 +301,10 @@ repository's worker:
   research settings under `labels.research` in the shape 「What a placed tool reads of its record」 states, with
   `branchesAt` and `branchesToken` for a run allowed branches; a branch's own record it issues with `branchOf`
   and without either, and shows it no `web/research`.
+- **The tool host or its deployment:** a tool session the web console's server holds through its settings, whose
+  record names the namespace `explorer`, so the console reads a link card's preview with `explorer/link_preview`
+  and its picture with `explorer/fetch_raster` and `square` instead of a page reader of its own.
+- **bmo-web:** its link cards read through those two entries and drop the console's own page and picture reader,
+  keeping its per-address keeping and its card route as they stand.
 - **The tool host's deployment:** the `web/research_branch`, `bmo/browse` and `bmo/remote_browser` tools this
   repository does not place stand registered in a host they were put into until they are taken out of it.

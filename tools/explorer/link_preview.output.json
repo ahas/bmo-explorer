@@ -1,0 +1,39 @@
+{
+  "description": "A link's preview, as the page's head declares it.",
+  "properties": {
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "image": {
+      "description": "The preview picture's absolute address.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "siteName": {
+      "description": "The site's own name for itself, as its Open Graph tags declare it.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "title": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "url": {
+      "description": "The address the read ended at, after every redirect.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "url"
+  ],
+  "type": "object"
+}

@@ -29,3 +29,17 @@ fn every_identity_is_one_chrome_of_the_installed_version_and_says_the_same_platf
   assert_eq!(next(named(Some("linux"))).name, "windows");
   assert_eq!(next(named(Some("android"))).name, "linux");
 }
+
+#[test]
+fn a_previewer_says_it_is_one_and_sends_no_browser_s_hints() {
+  let headers = Presentation::Previewer.headers(FetchSite::CrossSite);
+  let names: Vec<&str> = headers.iter().map(|(name, _)| *name).collect();
+
+  assert_eq!(names, ["accept", "accept-encoding", "accept-language", "user-agent"]);
+  assert!(headers.contains(&("user-agent", PREVIEWER_AGENT.to_owned())));
+  assert!(PREVIEWER_AGENT.starts_with("facebookexternalhit/1.1"));
+  assert_eq!(
+    Presentation::Browser(DEFAULT).headers(FetchSite::None),
+    navigation_headers(FetchSite::None, DEFAULT)
+  );
+}

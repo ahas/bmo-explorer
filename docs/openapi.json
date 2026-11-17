@@ -196,6 +196,13 @@
               "null"
             ]
           },
+          "siteName": {
+            "description": "The site's own name for itself, as its Open Graph tags declare it.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "title": {
             "type": [
               "string",
@@ -566,7 +573,7 @@
       "route": null
     },
     {
-      "description": "A link's preview as the page's head declares it: title, description, picture.",
+      "description": "A link's preview as the page's head declares it: title, description, site name, picture.",
       "function": "bmo_explorer::client::Explorer::link_preview",
       "input": {
         "additionalProperties": false,
