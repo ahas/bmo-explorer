@@ -108,25 +108,35 @@ pub struct SessionParts {
   /// How the browser a session falls back to is made, under the session's guard; the machine's browser where
   /// none is named, a test's stand-in otherwise.
   pub browsers: Option<BrowserFactory>,
+  /// The road a met challenge's stage is read off a screenshot by, when the loop needs a picture understood;
+  /// none where no gateway key stands to be read, and the loop then acts on what the page itself shows.
+  pub vision: Option<Arc<dyn crate::web::vision::Vision>>,
 }
 
 /// What makes a browser under a guard.
 pub type BrowserFactory = Arc<dyn Fn(UrlGuard) -> Arc<dyn BrowserFetcher> + Send + Sync>;
 
-/// The forcing read's answer: the page as `web_fetch` reads it, and what the read's one attempt at a met
-/// challenge came to (docs/web-access.md, 「When the browser meets a challenge」).
+/// The forcing read's answer: the page as `web_fetch` reads it, and what the read's loop at a met challenge
+/// came to (docs/web-access.md, 「When the browser meets a challenge」).
 pub struct CaptchaRead {
   pub slice: FetchSlice,
   pub challenge: ChallengeMark,
 }
 
 impl CaptchaRead {
-  /// The line the `web_captcha` tool heads its answer with.
-  pub fn line(&self) -> &'static str {
-    match self.challenge {
-      ChallengeMark::Cleared => "CHALLENGE CLEARED",
-      ChallengeMark::Remains => "CHALLENGE REMAINS",
-      ChallengeMark::NotAttempted => "NO CHALLENGE",
+  /// The lines the `web_captcha` tool heads its answer with: the outcome, then — where the loop ran — what
+  /// it did and how it ended, so the reader sees the rounds behind a page that came through
+  /// (docs/api.md, 「The captcha read」).
+  pub fn lines(&self) -> String {
+    let (head, tried) = match &self.challenge {
+      ChallengeMark::Cleared(tried) => ("CHALLENGE CLEARED", Some(tried)),
+      ChallengeMark::Remains(tried) => ("CHALLENGE REMAINS", Some(tried)),
+      ChallengeMark::NotAttempted => ("NO CHALLENGE", None),
+    };
+
+    match tried {
+      Some(tried) => format!("{head}\nATTEMPT: {}", tried.said()),
+      None => head.to_owned(),
     }
   }
 }
@@ -333,8 +343,8 @@ impl WebSession {
   }
 
   /// The forcing read of `web_captcha`: the browser road from the start, no direct attempt first, a challenge
-  /// met in the page attempted once (docs/web-access.md, 「When the browser meets a challenge」), and the
-  /// attempt's outcome carried back beside the page.
+  /// met in the page worked as a bounded loop of rounds (docs/web-access.md, 「When the browser meets a
+  /// challenge」), and the loop's account carried back beside the page.
   pub async fn captcha(&self, url: &str, options: &FetchPage) -> WebResult<CaptchaRead> {
     let target = raw_url_for(url);
 
@@ -348,8 +358,8 @@ impl WebSession {
 
   // The page as the real browser renders it: after a classified direct block, or first of all under the
   // browser-first strategy, where there is no direct attempt to name. The fetch road's browser reads ask for
-  // the one attempt at a met challenge (docs/web-access.md, 「When the browser meets a challenge」) and carry
-  // its mark back.
+  // the loop at a met challenge (docs/web-access.md, 「When the browser meets a challenge」) and carry its mark
+  // back.
   async fn rendered(
     &self,
     url: &str,
@@ -359,6 +369,7 @@ impl WebSession {
     let asking = FetchOptions {
       solve_challenge: true,
       pace: Some(self.page_pace()),
+      vision: self.parts.vision.clone(),
       ..FetchOptions::default()
     };
     let rendered = match self.browser().await.fetch(url.to_owned(), asking).await {
@@ -417,16 +428,14 @@ impl WebSession {
       let what = classified
         .reason
         .unwrap_or_else(|| format!("{:?}", classified.disposition).to_lowercase());
-      // What was done about it, said as it was done: the fetch road's browser read attempts a met challenge
-      // once, and a refusal names whether it did.
-      let said = match rendered.challenge {
-        ChallengeMark::Remains => format!(
-          "The real browser still reached {what} at {}; the challenge was attempted once and did not clear",
-          rendered.url
-        ),
-        ChallengeMark::Cleared => format!(
-          "The real browser cleared its challenge once and then reached {what} at {}",
-          rendered.url
+      // What was done about it, said as it was done: a fetch road read that met a challenge ran the loop,
+      // and the refusal names the rounds it went through and where it stopped — never a solve it did not
+      // see. A read that met no challenge says so plainly, as it did before the loop stood.
+      let said = match &rendered.challenge {
+        ChallengeMark::Remains(tried) | ChallengeMark::Cleared(tried) => format!(
+          "The real browser still reached {what} at {}; the challenge was {said}",
+          rendered.url,
+          said = tried.said()
         ),
         ChallengeMark::NotAttempted => format!(
           "The real browser still reached {what} at {}; no CAPTCHA or challenge was attempted",

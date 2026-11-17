@@ -96,12 +96,12 @@ flowchart TD
   engine or a category that holds no image engine is refused `bad-request`. Pictures are deduplicated by their
   direct address and mixed one engine at a time, as text hits are.
 - **`explorer_web_fetch` reads by the plain road:** the direct client, then the real browser after a block
-  (docs/web-access.md, 「Strategies」); a challenge met in the browser is attempted once (docs/web-access.md,
-  「When the browser meets a challenge」); a PDF comes back as its text. A site tool's own reading of a page it
-  claims is a tool host's (docs/site-contract.md, 「A page a tool claims」), and the MCP server has none. The
-  `web_captcha` tool's forcing read — the page opened in the browser from the start, the challenge attempt
-  named in the answer — has no MCP form: a harness reads pages through this tool and meets the attempt on the
-  way.
+  (docs/web-access.md, 「Strategies」); a challenge met in the browser is worked as a bounded loop of rounds
+  (docs/web-access.md, 「When the browser meets a challenge」); a PDF comes back as its text. A site tool's own
+  reading of a page it claims is a tool host's (docs/site-contract.md, 「A page a tool claims」), and the MCP
+  server has none. The `web_captcha` tool's forcing read — the page opened in the browser from the start, the
+  loop's account named in the answer — has no MCP form: a harness reads pages through this tool and meets the
+  loop on the way.
 - **`explorer_link_preview` and `explorer_fetch_page` read the page directly,** checking the address and each
   redirect, at most 512 KiB of it, paced 250 ms apart per host.
 - **`explorer_link_preview` reads as a link previewer** (docs/web-access.md, 「Identities and headers」), so a
@@ -225,11 +225,14 @@ alone, as long as the branch runs.
 
 `web/web_captcha`, handed `url` and optionally `offset` and `max_chars`, reads one page on the forcing road: the
 real browser from the start, no direct attempt first, and a CAPTCHA or browser challenge met in the page
-attempted once under docs/web-access.md, 「When the browser meets a challenge」. Its answer is the page as
-`web_fetch` answers it, headed by one line: `CHALLENGE CLEARED` where a challenge stood and the retried read
-came through, `NO CHALLENGE` where the browser read the page with nothing to attempt. A challenge that stands
-after the one attempt is refused with the block's own words, saying it was attempted once and did not clear; it
-is never attempted twice in a call or by the tool asking again on its own. The read takes a page of the
+worked as a bounded loop of rounds under docs/web-access.md, 「When the browser meets a challenge」. Its answer
+is the page as `web_fetch` answers it, headed by one line: `CHALLENGE CLEARED` where a challenge stood and the
+retried read came through, `CHALLENGE REMAINS` where a page is answered with its challenge still in it, or
+`NO CHALLENGE` where the browser read the page with nothing to work on. Either of the first two headings is
+followed by an `ATTEMPT:` line saying what the loop came to: its rounds, what each acting round did, and where
+it stopped — cleared, ended by the site's own words, or stopped at its round or time bound. A challenge that
+stands is refused with the block's own words and that same account, and never with a claim of a solve; the loop
+runs once per read and the tool never asks again on its own. The read takes a page of the
 record's budget like a `web_fetch` of that address; a record reading `direct-only` is refused naming the
 strategy, and the read holds to every other rule of the record's reading. It exists for a turn that met a
 challenge on the plain road and judges this page worth the forcing read, and for a site known to stand behind

@@ -124,6 +124,7 @@ fn reading(research: Research) -> WebRun {
       check: bmo_explorer::web::address::Check::default(),
       host_interval_ms: 0,
       browsers: None,
+      vision: None,
     }),
   )
 }

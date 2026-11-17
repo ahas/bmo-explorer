@@ -12,7 +12,26 @@ use futures_util::StreamExt;
 use http::{HeaderMap, HeaderValue};
 
 use bmo_explorer::web::address::{Check, Lookup};
+use bmo_explorer::web::browser::challenge::{Attempt, Outcome};
 use bmo_explorer::web::browser::{BrowserDocument, BrowserFetcher, FetchOptions};
+
+/// A loop's account as a stand-in browser's document carries it: a stopped attempt of the named rounds.
+pub fn stopped(rounds: u32, at: &'static str) -> Attempt {
+  Attempt {
+    outcome: Outcome::Stopped { at },
+    rounds,
+    log: vec!["watched its check run".into(), "the challenge still stood".into()],
+  }
+}
+
+/// A loop's account of the round that worked.
+pub fn cleared(rounds: u32) -> Attempt {
+  Attempt {
+    outcome: Outcome::Cleared,
+    rounds,
+    log: vec!["clicked its box".into()],
+  }
+}
 use bmo_explorer::web::client::{Incoming, Outgoing, Transport};
 use bmo_explorer::web::clock::StandingClock;
 use bmo_explorer::web::error::WebResult;

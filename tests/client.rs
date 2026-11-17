@@ -38,6 +38,7 @@ fn client(web: Web) -> (Explorer, Arc<Web>, Arc<FakeBrowser>) {
     check: check(StandingClock::at(1_000_000)),
     host_interval_ms: 0,
     browsers: Some(Arc::new(move |_| made.clone())),
+    vision: None,
   }));
 
   (client, web, browser)

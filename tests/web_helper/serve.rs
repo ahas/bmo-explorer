@@ -35,6 +35,7 @@ fn run_checked(research: Research, check: Check) -> Arc<WebRun> {
       check,
       host_interval_ms: 0,
       browsers: None,
+      vision: None,
     }),
   ))
 }
@@ -265,6 +266,7 @@ fn run_browsers(research: Research, browser: Arc<crate::web::testing::FakeBrowse
       check: crate::web::testing::check(StandingClock::at(1_000_000)),
       host_interval_ms: 0,
       browsers: Some(Arc::new(move |_| made.clone())),
+      vision: None,
     }),
   ))
 }
@@ -294,19 +296,24 @@ fn gate_page() -> bmo_explorer::web::browser::BrowserDocument {
     title: "Just a moment...".into(),
     text: "Verify you are human".into(),
     html: "<html><head><title>Just a moment...</title></head><body><div class=\"cf-turnstile\"></div></body></html>".into(),
-    ..forcing_page("", bmo_explorer::web::browser::ChallengeMark::Remains)
+    ..forcing_page(
+      "",
+      bmo_explorer::web::browser::ChallengeMark::Remains(crate::web::testing::stopped(
+        6, "the round bound",
+      )),
+    )
   }
 }
 
-// The forcing read: the browser answers the record's web helper, and the answer carries the attempt's line
+// The forcing read: the browser answers the record's web helper, and the answer carries the loop's account
 // before the page (docs/api.md, 「The captcha read」).
 #[tokio::test]
-async fn a_captcha_request_is_answered_with_the_attempt_line_before_the_page() {
+async fn a_captcha_request_is_answered_with_the_loop_line_before_the_page() {
   use bmo_explorer::web::browser::ChallengeMark;
 
   let browser = crate::web::testing::FakeBrowser::answering([forcing_page(
     "the page behind the challenge",
-    ChallengeMark::Cleared,
+    ChallengeMark::Cleared(crate::web::testing::cleared(3)),
   )]);
   let (_dir, socket) = served(run_browsers(Research::default(), browser.clone())).await;
   let answer: Answer = ask_line(
@@ -322,7 +329,7 @@ async fn a_captcha_request_is_answered_with_the_attempt_line_before_the_page() {
   let said = answer.plain();
 
   assert!(!answer.is_error);
-  assert!(said.starts_with("CHALLENGE CLEARED\n"), "{said}");
+  assert!(said.starts_with("CHALLENGE CLEARED\nATTEMPT: cleared in 3 round(s)"), "{said}");
   assert!(said.contains("the page behind the challenge"));
   let asked = browser.asked();
   assert_eq!(asked.len(), 1, "the forcing read reads the page once");
@@ -347,13 +354,18 @@ async fn a_forcing_read_that_met_nothing_is_headed_as_it_says() {
   .await
   .unwrap();
 
-  assert!(answer.plain().starts_with("NO CHALLENGE\n"), "{}", answer.plain());
+  let said = answer.plain();
+
+  assert!(
+    said.starts_with("NO CHALLENGE\nURL: "),
+    "no ATTEMPT line where nothing was attempted: {said}"
+  );
+  assert!(said.contains("plain page"));
 }
 
-// A challenge that stands after the one attempt is the refusal it is: named, said to have been attempted,
-// and final (docs/web-access.md, 「When the browser meets a challenge」).
+// A challenge that stands after the loop is the refusal it is: named, its rounds said, never a solve claimed.
 #[tokio::test]
-async fn a_captcha_request_whose_challenge_stands_is_refused_once_and_says_it_was_attempted() {
+async fn a_captcha_request_whose_challenge_stands_is_refused_with_its_rounds_said() {
   let browser = crate::web::testing::FakeBrowser::answering([gate_page()]);
   let (_dir, socket) = served(run_browsers(Research::default(), browser.clone())).await;
   let answer: Answer = ask_line(
@@ -368,7 +380,8 @@ async fn a_captcha_request_whose_challenge_stands_is_refused_once_and_says_it_wa
   .unwrap();
 
   assert!(answer.is_error);
-  assert!(answer.plain().contains("attempted once and did not clear"), "{}", answer.plain());
+  assert!(answer.plain().contains("attempted over 6 round(s)"), "{}", answer.plain());
+  assert!(answer.plain().contains("the challenge was not solved"), "{}", answer.plain());
   assert_eq!(browser.calls(), 1, "the helper does not send the read again");
 }
 

@@ -97,7 +97,8 @@ async fn a_refused_challenge_is_answered_as_a_refusal() {
   helper(&socket, |_| {
     serde_json::to_value(Answer::failure(
       "ERROR: The real browser still reached CAPTCHA or browser challenge (HTTP 403) at \
-       https://gate.example/asked; the challenge was attempted once and did not clear",
+       https://gate.example/asked; the challenge was attempted over 6 round(s) (clicked its box; the challenge \
+       still stood) and stopped at the round bound; the challenge was not solved",
     ))
     .unwrap()
   });
@@ -105,7 +106,7 @@ async fn a_refused_challenge_is_answered_as_a_refusal() {
   let answer = called(&session, json!({ "url": "https://gate.example/asked" })).await;
 
   assert!(answer.is_error);
-  assert!(answer.plain().contains("attempted once and did not clear"));
+  assert!(answer.plain().contains("the challenge was not solved"));
 }
 
 #[tokio::test]

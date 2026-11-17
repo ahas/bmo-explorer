@@ -167,6 +167,8 @@ impl WebRun {
         },
         host_interval_ms: research.host_interval_ms.unwrap_or(crate::web::client::DIRECT_HOST_INTERVAL_MS),
         browsers: None,
+        vision: crate::web::vision::Gateway::open(&data_root)
+          .map(|road| Arc::new(road) as Arc<dyn crate::web::vision::Vision>),
       })),
       branches: Branches::new(),
       research,
@@ -208,7 +210,8 @@ impl WebRun {
       .await
   }
 
-  /// One page on the forcing road: the browser from the start and a challenge met on the way attempted once
+  /// One page on the forcing road: the browser from the start and a challenge met on the way worked as a
+  /// bounded loop of rounds
   /// (docs/web-access.md, 「When the browser meets a challenge」). A record reading `direct-only` is refused
   /// naming the strategy; every other rule of the record's reading holds.
   pub async fn solve_captcha(

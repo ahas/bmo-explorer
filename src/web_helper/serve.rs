@@ -141,7 +141,7 @@ async fn captcha(run: &WebRun, url: &str, offset: Option<usize>, max_chars: Opti
   let max_chars = max_chars.map_or(DEFAULT_FETCH_CHARS, |chars| chars.clamp(1, MAX_FETCH_CHARS));
 
   match run.solve_captcha(url, offset, Some(max_chars)).await {
-    Ok(read) => Answer::text(format!("{}\n{}", read.line(), render_slice(&read.slice))),
+    Ok(read) => Answer::text(format!("{}\n{}", read.lines(), render_slice(&read.slice))),
     Err(error) => run.failed(&error),
   }
 }

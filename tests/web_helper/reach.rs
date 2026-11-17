@@ -22,6 +22,7 @@ fn reading(trusted: bool) -> WebRun {
       },
       host_interval_ms: 0,
       browsers: None,
+      vision: None,
     }),
   )
 }

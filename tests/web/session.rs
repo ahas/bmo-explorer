@@ -2,7 +2,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use super::testing::{FakeBrowser, Web, answer, check, pdf_of};
+use super::testing::{FakeBrowser, Web, answer, check, cleared, pdf_of, stopped};
 use bmo_explorer::web::browser::{Arrived, ChallengeMark, Link};
 use bmo_explorer::web::browser::{BrowserDocument, BrowserFetcher, FetchOptions};
 use bmo_explorer::web::clock::{Clock, StandingClock};
@@ -39,6 +39,7 @@ fn session(web: Arc<Web>, browser: Arc<FakeBrowser>, clock: Arc<StandingClock>) 
     check: check(clock),
     host_interval_ms: 0,
     browsers: Some(Arc::new(move |_| made.clone())),
+    vision: None,
   })
 }
 
@@ -235,12 +236,12 @@ async fn a_challenge_that_remains_in_chrome_is_reported() {
   assert_eq!((failed.kind, failed.chrome_fallback), (Failure::Blocked, true));
 }
 
-// The fetch road's browser read asks for the one attempt (docs/web-access.md, 「When the browser meets a
-// challenge」): a challenge the attempt cleared is answered as the page behind it.
+// The fetch road's browser read asks for the loop (docs/web-access.md, 「When the browser meets a
+// challenge」): a challenge the loop cleared is answered as the page behind it.
 #[tokio::test]
-async fn a_challenge_the_attempt_cleared_is_answered_as_the_page_behind_it() {
+async fn a_challenge_the_loop_cleared_is_answered_as_the_page_behind_it() {
   let browser = FakeBrowser::new(BrowserDocument {
-    challenge: ChallengeMark::Cleared,
+    challenge: ChallengeMark::Cleared(cleared(3)),
     ..rendered()
   });
   let reading = session(every("denied", "text/plain", 403), browser.clone(), StandingClock::at(1_000_000));
@@ -253,15 +254,15 @@ async fn a_challenge_the_attempt_cleared_is_answered_as_the_page_behind_it() {
   assert!(asked[0].solve, "the fetch road asks for the attempt");
 }
 
-// A challenge that stands after the attempt is refused with what was done said, and the read never goes back.
+// A challenge that stands after the loop is refused with the rounds named, and the read never goes back.
 #[tokio::test]
-async fn a_challenge_attempted_once_and_still_standing_is_refused_once_and_final() {
+async fn a_challenge_still_standing_after_the_loop_is_refused_with_its_rounds_said() {
   let browser = FakeBrowser::new(BrowserDocument {
     status: 403,
     title: "Just a moment...".into(),
     text: "Verify you are human".into(),
     html: "<html><head><title>Just a moment...</title></head><body><div class=\"cf-turnstile\"></div></body></html>".into(),
-    challenge: ChallengeMark::Remains,
+    challenge: ChallengeMark::Remains(stopped(6, "the round bound")),
     ..rendered()
   });
   let reading = session(every("denied", "text/plain", 403), browser.clone(), StandingClock::at(1_000_000));
@@ -269,8 +270,10 @@ async fn a_challenge_attempted_once_and_still_standing_is_refused_once_and_final
 
   assert_eq!((failed.kind, failed.chrome_fallback), (Failure::Blocked, true));
   assert!(
-    failed.message.contains("the challenge was attempted once and did not clear"),
-    "the refusal says what was tried: {failed}"
+    failed.message.contains("attempted over 6 round(s)")
+      && failed.message.contains("stopped at the round bound")
+      && failed.message.contains("the challenge was not solved"),
+    "the refusal says the rounds, the bound, and that it was not solved: {failed}"
   );
   assert_eq!(browser.calls(), 1, "one refusal is final for the read");
 }
@@ -313,7 +316,7 @@ async fn the_forcing_read_sends_nothing_direct_and_names_what_it_met() {
     .unwrap();
 
   assert_eq!(read.challenge, ChallengeMark::NotAttempted);
-  assert_eq!(read.line(), "NO CHALLENGE");
+  assert_eq!(read.lines(), "NO CHALLENGE");
   assert!(browser.asked()[0].solve);
   assert!(web.asked().is_empty(), "the forcing road asks the site only through the browser");
 }
@@ -403,6 +406,7 @@ async fn a_page_asked_for_fresh_is_rendered_in_a_browser_of_its_own_and_ended() 
       made.lock().unwrap().push(browser.clone());
       browser
     })),
+    vision: None,
   });
   reading.render("https://fixture.test/app", true, FetchOptions::default()).await.unwrap();
   reading.render("https://fixture.test/app", true, FetchOptions::default()).await.unwrap();

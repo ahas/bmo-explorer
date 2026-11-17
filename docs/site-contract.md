@@ -141,7 +141,7 @@
 |---|---|---|
 | `search` | `query`, `count?`, `language?`, `category?` | the tool result of a web search |
 | `fetch` | `url`, `offset?`, `max_chars?`, `raw` (false where absent) | the tool result of a page read |
-| `captcha` | `url`, `offset?`, `max_chars?` | the tool result of the forcing read: the page read in the real browser with a challenge met on the way attempted once, headed `CHALLENGE CLEARED` or `NO CHALLENGE`, or the refusal of one that stands (docs/web-access.md, 「When the browser meets a challenge」) |
+| `captcha` | `url`, `offset?`, `max_chars?` | the tool result of the forcing read: the page read in the real browser with a challenge met on the way worked as a bounded loop of rounds, headed `CHALLENGE CLEARED`, `CHALLENGE REMAINS` or `NO CHALLENGE` with the loop's account on the line after it, or the refusal of one that stands (docs/web-access.md, 「When the browser meets a challenge」) |
 | `picture` | `image`, the address of an image file | the tool result holding the picture |
 | `branch` | `angle`, the whole angle a research branch researches | the tool result of the branch: its framed notes once it has ended, or the refusal (docs/api.md, 「The research branch」) |
 | `page` | `url`, `request?`: `body?` and `headers`, a list of name and value pairs | the road's result: the body |

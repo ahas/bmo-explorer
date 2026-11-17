@@ -289,9 +289,9 @@
   - start a browser on the owner's profile itself, or write anything into it
   - open a Chrome profile of a person's
   - sign in to anything, or pretend to be an account the profile is not signed in to
-  - solve a CAPTCHA by reading its pictures, answering its questions or taking its audio road, or pass one
-    to a solving service; the one attempt a fetch road read makes at a challenge is the site's own check
-    handed through and its own box clicked (「When the browser meets a challenge」)
+  - pass a CAPTCHA to a solving service or take its audio road; what a fetch road read does at a challenge is
+    its own bounded loop of rounds, on the site's own check, the page's own shapes and, where a round needs a
+    picture read, this deployment's own vision model (「When the browser meets a challenge」)
 
 ### The browser's network path
 
@@ -408,39 +408,69 @@
 
 ### When the browser meets a challenge
 
-- **Where the attempt stands:** a page read by the fetch road — `web_fetch`, the MCP page read, and the
+- **Where the loop stands:** a page read by the fetch road — `web_fetch`, the MCP page read, and the
   `web_captcha` tool alike — classifies the page the browser came to rest on. Where that reading names the
-  page a challenge (「How a fetched page is classified」), the read attempts the challenge once before it
-  answers. A refusal whose page holds no challenge marks is answered as it stands, and a challenge on the
-  search engine's browser remedy or a site tool's `rendered` road is left as it is: those roads never
-  attempt.
-- **The attempt, in this order, once per read:**
-  - **Hand the check through:** the page as it stands is given its own check to finish, watched at a short
-    interval up to ten seconds. A managed browser check that runs its script and moves on by itself clears
-    here, which is how such a challenge is passed: by letting the site's own check complete.
-  - **Click its own box:** where a challenge widget still stands, the read finds the widget's iframe box as
-    the main document shows it, scrolls it into view, and clicks once where a checkbox challenge puts its
-    box — the left of the widget — through the browser's own input path, as a person's click, so the click
-    is trusted. The page is then given the same ten seconds again.
-  - **Retry the read once:** the address asked for is opened once more and its page read as every browser
-    page is read. This is the read's one retry; a read never attempts twice, and a refusal after it is
-    final for that read.
-- **Never a solver:** the attempt reads no picture CAPTCHA, answers no puzzle or question, takes no audio
-  road, fills no field, and passes nothing to a solving service. A challenge that asks anything of a reader
-  is not solved and never claimed: it stays a block.
+  page a challenge (「How a fetched page is classified」), the read works the challenge as a bounded loop of
+  rounds before it answers. A refusal whose page holds no challenge marks is answered as it stands, and a
+  challenge on the search engine's browser remedy or a site tool's `rendered` road is left as it is: those
+  roads never work a challenge.
+- **One round, in this order:**
+  - **Hand the check through first:** the page as it stands is given its own check to finish, watched at a
+    short interval up to ten seconds. A managed browser check that runs its script and moves on by itself
+    clears here, which is how such a challenge is passed: by letting the site's own check complete. Nothing is
+    touched while it runs.
+  - **Read what the stage stands for:** one probe of the page as it is answers what kind of round this is — a
+    widget's box, a slider's handle over its board, a field the site asks words in, or nothing at all to act
+    on. The probe names those places in the page's own view, and for a slider it also carries the two pictures
+    of it, copied through the page where that copy stands untainted.
+  - **Act through the browser's own input,** never an event dispatched into the page: a press and a release
+    over one point for a box, a press, a pull and a release for a slider, keys and one Enter for words asked
+    of a field. Every one of them is walked rather than jumped.
+  - **Watch what the page says of the act,** on the same ten seconds: gone, ended by the site's own words, or
+    still standing. An act is never counted as cleared because it was made; only the page's own answer ends a
+    round.
+  - **Stop at a bound:** one read's loop holds six rounds and ninety seconds, and a caller that wants other
+    bounds asks for them by name. Which bound it stopped at stands in the account the read carries.
+- **The walked path:** a gesture goes from where the hand already stands — kept between rounds as a person's
+  is — to the point the page named. The path between them is sampled so the move is slow at both ends and fast
+  through its middle, bows a little off the straight line, and on a long pull walks past its target and settles
+  back over it; the waits between its steps are never exactly even, a settle stands before a press and a hold
+  under it. So a slider pull overshoots its gap and corrects, as a hand's does. The shape is the one the human
+  track roads of open slider practice publish as what a tracker accepts; the parameters are this repository's
+  own, and no synthetic in-page event is ever dispatched, since those same roads report those as what gets
+  detected.
+- **Where a round needs the screen read:** where the page shows a slider it carries no picture of, or asks
+  words or a pick the page does not say in its own text, one screenshot of the browser's own screen is asked of
+  the deployment's own Qwen vision model over the model gateway, on the owner's allowance of 2026-11-17 that
+  the tool may call his model from inside itself. The question names the shapes the answer may take and asks
+  for one JSON object: what kind of stage this stands for, where a box or a pick stands, where a slider's gap
+  stands, or what words to type. What comes back is acted on as a suggestion, and where no key for that gateway
+  stands in the data root, or the reading fails, the round acts on what the page itself showed.
+- **The gap of a slider:** where the page carried its two pictures, the hole is read by the two slider
+  algorithms of ddddocr (MIT licence) re-expressed as plain Rust over the picture library this repository
+  already stands on — an edge-matching read of the piece over the board, and a column-difference read for a
+  shadow gap. No Python, no model file, no sidecar and no service stands in the deployment for it, and where
+  neither reading names a gap, the round is read off the screen instead.
+- **The read's one retry:** when the loop ends, the address asked for is opened once more and its page read as
+  every browser page is read. That is the read's one retry, and a refusal after it is final for that read.
+- **Never a solver service, and never a claim:** nothing goes to a paid solving service, no audio road is
+  taken and no puzzle is answered by guessing; what the vision model and the matcher read are this
+  deployment's own readings of a picture this layer took itself, on the owner's allowance above. A challenge
+  that stands is not solved and is never claimed as solved or bypassed: it stays a block.
 - **What is said either way:** a page that comes through is answered as any browser page, and the
   `web_captcha` tool heads it with the line `CHALLENGE CLEARED`; a page the browser read with no challenge
-  met is headed `NO CHALLENGE`. A challenge that stands after the one attempt is refused with the block's
-  own words and the statement that the challenge was attempted once and did not clear — never with a claim
-  of having been solved or bypassed.
+  met is headed `NO CHALLENGE`. Either heading carries the loop's own account on the line after it: how many
+  rounds it stood, what each acting round did and what the page said after it, and — where the loop ended
+  rather than the page clearing — which bound it stopped at, or that the site itself ended the challenge in its
+  own words. A refusal of a standing challenge says the same in its own text, and never a claim of a solve.
 
 ### What the browser returns
 
 - **Ordinary content:** when the browser produces the ordinary body behind JavaScript, it is returned in
   the same character-slicing format, with the final URL, content type and `browser` provenance.
 - **Still blocked:** if an HTTP refusal or a challenge/CAPTCHA remains in the browser too, `blocked` is
-  returned. Where the read attempted the challenge (「When the browser meets a challenge」), the refusal
-  says it was attempted once and did not clear.
+  returned. Where the read worked the challenge (「When the browser meets a challenge」), the refusal carries
+  the loop's account: its rounds, what each acting round did, and where it stopped.
 - **No claims of bypassing:** a real browser having seen a challenge is not success, and nothing is
   recorded as having "bypassed" or "cleared" any protection. The line `CHALLENGE CLEARED` says only that
   the site's own check came to its own end and the retried read answered the page.

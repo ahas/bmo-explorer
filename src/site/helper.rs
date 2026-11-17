@@ -43,8 +43,9 @@ pub enum WebAsked {
     #[serde(default)]
     raw: bool,
   },
-  /// One page read on the forcing road: the browser from the start, a challenge met attempted once, the
-  /// attempt's outcome named in the answer (docs/web-access.md, 「When the browser meets a challenge」).
+  /// One page read on the forcing road: the browser from the start, a challenge met worked as a bounded loop of
+  /// rounds, the loop's account named in the answer (docs/web-access.md, 「When the browser meets a
+  /// challenge」).
   Captcha {
     url: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

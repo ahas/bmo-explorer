@@ -313,6 +313,8 @@ impl Explorer {
       check: Check::default(),
       host_interval_ms: DIRECT_HOST_INTERVAL_MS,
       browsers: None,
+      vision: crate::web::vision::Gateway::open(data_root)
+        .map(|road| Arc::new(road) as Arc<dyn crate::web::vision::Vision>),
     }))
   }
 

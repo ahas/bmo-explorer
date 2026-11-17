@@ -12,6 +12,7 @@
 pub mod challenge;
 pub mod chrome;
 pub mod copy;
+pub mod ddddocr;
 pub mod detached;
 pub mod display;
 pub mod firefox;
@@ -19,6 +20,7 @@ pub mod places;
 pub mod profile;
 pub mod proxy;
 pub mod remote;
+pub mod track;
 
 use std::future::Future;
 use std::net::IpAddr;
@@ -34,6 +36,7 @@ use tokio::task::JoinHandle;
 use crate::forms::classify::{Fetched, classify};
 use crate::web::clock::{self, Clock, now_ms};
 use crate::web::error::{Failure, WebError, WebResult};
+use crate::web::vision::Vision;
 
 pub use chrome::{launch_arguments, launch_environment};
 
@@ -50,21 +53,21 @@ pub struct BrowserDocument {
   pub user_agent: String,
   pub webdriver: bool,
   pub truncated: bool,
-  /// What the read's one attempt at a met challenge came to (「When the browser meets a challenge」).
+  /// What the read's reasoning loop at a met challenge came to (「When the browser meets a challenge」).
   pub challenge: ChallengeMark,
 }
 
 /// What a read that asks for the attempt (docs/web-access.md, 「When the browser meets a challenge」) did
-/// about a challenge met in its page.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// about a challenge met in its page, carrying the loop's rounds and log wherever it goes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum ChallengeMark {
   /// The read met no challenge, or did not ask for the attempt.
   #[default]
   NotAttempted,
-  /// The attempt was made and the retried read answered a page that is no longer a challenge.
-  Cleared,
-  /// The attempt was made and the retried read answered a challenge again.
-  Remains,
+  /// The loop ran and the retried read answered a page that is no longer a challenge.
+  Cleared(challenge::Attempt),
+  /// The loop ran and the retried read answered a challenge still standing.
+  Remains(challenge::Attempt),
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
@@ -86,7 +89,7 @@ pub type Arrived = Arc<dyn Fn(&str, &str) -> bool + Send + Sync>;
 #[derive(Clone)]
 pub struct FetchOptions {
   pub arrived: Option<Arrived>,
-  /// Whether a challenge met in the page is attempted once and the read retried
+  /// Whether a challenge met in the page is worked as a bounded loop and the read retried
   /// (docs/web-access.md, 「When the browser meets a challenge」); false where the road does not ask.
   pub solve_challenge: bool,
   /// The host's turn in its pacing queue, taken before the retried read opens the address again — every
@@ -94,6 +97,12 @@ pub struct FetchOptions {
   pub pace: Option<Pace>,
   /// The clock the attempt's waits stand on; the machine's own where none is handed, a test's otherwise.
   pub clock: Arc<dyn Clock>,
+  /// How many rounds and how many milliseconds one read's challenge loop may take; its default where none is
+  /// named. A test names a small bound so it holds the loop to its word without waiting on the real clock.
+  pub bounds: challenge::Bounds,
+  /// The road that reads a stage off a screenshot when the loop needs a picture understood; none where the
+  /// key file is not there, and the loop then acts only on what the page itself shows.
+  pub vision: Option<Arc<dyn Vision>>,
 }
 
 impl Default for FetchOptions {
@@ -103,6 +112,8 @@ impl Default for FetchOptions {
       solve_challenge: false,
       pace: None,
       clock: clock::system(),
+      bounds: challenge::Bounds::default(),
+      vision: None,
     }
   }
 }
@@ -193,6 +204,19 @@ pub trait Product: Send + Sync {
   fn start<'a>(&'a self, guard: &'a UrlGuard) -> Answer<'a, WebResult<Box<dyn Running>>>;
 }
 
+/// One event of the pointer, at a point of the page's view in CSS pixels.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Gesture {
+  Move { x: f64, y: f64 },
+  Down { x: f64, y: f64 },
+  Up { x: f64, y: f64 },
+}
+
+/// A view point in whole pixels, the shape every product's input events carry.
+pub(crate) fn whole(x: f64, y: f64) -> (u32, u32) {
+  (x.round().max(0.0) as u32, y.round().max(0.0) as u32)
+}
+
 /// One browser as it runs, with everything started for it, driven one navigation at a time.
 pub trait Running: Send + Sync {
   /// Whether its connection still stands.
@@ -202,9 +226,14 @@ pub trait Running: Send + Sync {
   fn open<'a>(&'a self, url: &'a str) -> Answer<'a, WebResult<()>>;
   /// An expression's value in the page, as plain JSON.
   fn evaluate<'a>(&'a self, expression: &'a str) -> Answer<'a, WebResult<Value>>;
-  /// One trusted click at a point of the page's view, through the browser's own input path: what a widget
-  /// of a challenge page accepts as a person's click.
-  fn click<'a>(&'a self, x: f64, y: f64) -> Answer<'a, WebResult<()>>;
+  /// One trusted event of the pointer, through the browser's own input path — the walk between the events
+  /// is the caller's, and human-like: this is what a widget of a challenge page accepts as a person's hand.
+  fn gesture<'a>(&'a self, at: &'a Gesture) -> Answer<'a, WebResult<()>>;
+  /// Words typed and, when asked, Enter pressed — through the browser's own key path, for a stage that
+  /// answers through a field.
+  fn keys<'a>(&'a self, text: &'a str, enter: bool) -> Answer<'a, WebResult<()>>;
+  /// The page's view as one PNG, through the browser's own picture path.
+  fn screenshot<'a>(&'a self) -> Answer<'a, WebResult<Vec<u8>>>;
   /// What the page's events have shown of the navigation under way.
   fn watch(&self) -> &PageWatch;
   /// Whether the page has come to rest (docs/web-access.md, 「Lifetime and cleanup」).
@@ -566,12 +595,14 @@ impl Browser {
 
     (self.inner.guard)(document.url.clone()).await?;
 
-    // One attempt at a challenge met in the page, then the address opened once more: the read's one retry,
-    // after the host's turn in its queue as every top-level navigation takes
-    // (docs/web-access.md, 「When the browser meets a challenge」). A refusal whose page holds no challenge is
-    // answered as it stands, and a challenge that stands after this is the caller's to refuse.
+    // The reasoning loop at a challenge met in the page — rounds until the stage ends, the site ends it, or
+    // the bounds are spent — then the address opened once more: the read's one retry, after the host's turn
+    // in its queue as every top-level navigation takes (docs/web-access.md, 「When the browser meets a
+    // challenge」). What the loop did travels with the mark either way; a refusal whose page holds no
+    // challenge is answered as it stands, and a challenge that stands after this is the caller's to refuse.
     if options.solve_challenge && stands_a_challenge(&document, url) {
-      challenge::attempt(running, &*options.clock).await;
+      let tried =
+        challenge::attempt(running, &*options.clock, &options.bounds, options.vision.as_ref()).await;
 
       if let Some(pace) = &options.pace {
         pace(url.to_owned()).await?;
@@ -580,9 +611,9 @@ impl Browser {
       document = self.read_opened(running, url, options).await?;
       (self.inner.guard)(document.url.clone()).await?;
       document.challenge = if stands_a_challenge(&document, url) {
-        ChallengeMark::Remains
+        ChallengeMark::Remains(tried)
       } else {
-        ChallengeMark::Cleared
+        ChallengeMark::Cleared(tried)
       };
     }
 

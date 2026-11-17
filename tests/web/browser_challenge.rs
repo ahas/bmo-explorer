@@ -1,19 +1,23 @@
-//! The one attempt a fetch road browser read makes (docs/web-access.md, 「When the browser meets a
-//! challenge」), driven against a stand-in browser product: what it looks at, when it clicks, and how often
-//! it opens the page.
+//! The reasoning loop a fetch road browser read makes at a challenge (docs/web-access.md, 「When the browser
+//! meets a challenge」), driven against a stand-in product that records every trusted gesture and key the loop
+//! sends: what it waits through, what it clicks and pulls and types, the shape of the walk it walks, and where
+//! it stops. The clock is a standing one throughout, so a round's waits cost the test nothing.
 
+use std::io::Cursor;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
+use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba, RgbaImage};
 use serde_json::{Value, json};
 
-use bmo_explorer::web::browser::challenge::{BOX, STILL};
+use bmo_explorer::web::browser::challenge::{ASK, Bounds, Outcome, STAGE, STILL};
 use bmo_explorer::web::browser::*;
 use bmo_explorer::web::clock::StandingClock;
 use bmo_explorer::web::error::{Failure, WebError, WebResult};
+use bmo_explorer::web::vision::Vision;
 
-// The page one opening stands the browser at, answered by every snapshot of it.
+// The page one opening stands the browser at.
 #[derive(Clone)]
 struct Phase {
   status: u16,
@@ -40,55 +44,94 @@ fn page() -> Phase {
   }
 }
 
-// What the stand-in browser saw.
-#[derive(Default)]
-struct Seen {
-  opens: Vec<String>,
-  clicks: Vec<(f64, f64)>,
-  markers: usize,
-  boxes: usize,
+// The gate as the site itself closes it, in its own words.
+fn refusing() -> Phase {
+  Phase {
+    status: 403,
+    title: "Just a moment...",
+    text: "Too many failed attempts, try again later",
+    html: "<html><head><title>Just a moment...</title></head><body><p>Too many failed attempts</p></body></html>",
+  }
 }
 
-// The stand-in: one opening per phase, marker and box answers from its queues — the last of them kept — and
-// every snapshot of an opening the same page, so the settle comes to rest at once.
+// What the stand-in browser saw of one read.
+#[derive(Default)]
+struct Seen {
+  opens: usize,
+  markers: usize,
+  stages: usize,
+  shots: usize,
+  moves: usize,
+  downs: usize,
+  ups: usize,
+  down_at: Option<(f64, f64)>,
+  up_at: Option<(f64, f64)>,
+  farthest_x: f64,
+  keys: Vec<(String, bool)>,
+}
+
+// How the scripted gate comes off: under its own check, under a release, under an answer, or by the site's own
+// refusal — or never.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Clear {
+  OnWatch,
+  OnRelease,
+  OnKeys,
+  EndsAfterAct,
+  Never,
+}
+
+// The stand-in: a gate that comes off as the test scripts it, answering the loop's marker probe and its stage
+// probe and recording every gesture the loop sends through the browser's own input.
 struct Scripted {
   phases: Vec<Phase>,
   opening: AtomicUsize,
-  stills: Mutex<Answers>,
-  points: Mutex<Answers>,
+  stage: Value,
+  clear: Clear,
+  downs: AtomicUsize,
+  ups: AtomicUsize,
+  watches: AtomicUsize,
+  cleared: AtomicBool,
   seen: Mutex<Seen>,
   watch: PageWatch,
 }
 
-// One scripted answer queue: the last answer it holds stands for every ask after it runs out.
-struct Answers(Vec<Value>);
-
-impl Answers {
-  fn next(&mut self) -> Value {
-    if self.0.len() > 1 {
-      self.0.remove(0)
-    } else {
-      self.0.first().cloned().unwrap_or(Value::Null)
-    }
-  }
-}
-
 impl Scripted {
-  fn of(pages: Vec<Phase>, stills: Vec<Value>, points: Vec<Value>) -> Arc<Self> {
-    Arc::new(Self {
-      phases: pages,
-      opening: AtomicUsize::new(0),
-      stills: Mutex::new(Answers(stills)),
-      points: Mutex::new(Answers(points)),
-      seen: Mutex::new(Seen::default()),
-      watch: PageWatch::default(),
-    })
-  }
-
   fn phase(&self) -> Phase {
     let at = self.opening.load(Ordering::SeqCst).saturating_sub(1);
 
     self.phases.get(at).or(self.phases.last()).expect("the script names a page").clone()
+  }
+
+  // What the page now says of its challenge, as the loop's own marker probe reads it.
+  fn still(&self) -> &'static str {
+    match self.clear {
+      // The site's check passes on its own, part way through the round's wait.
+      Clear::OnWatch => {
+        if self.watches.fetch_add(1, Ordering::SeqCst) == 0 {
+          "standing"
+        } else {
+          self.cleared.store(true, Ordering::SeqCst);
+
+          "gone"
+        }
+      }
+      Clear::OnRelease | Clear::OnKeys => {
+        if self.cleared.load(Ordering::SeqCst) {
+          "gone"
+        } else {
+          "standing"
+        }
+      }
+      Clear::EndsAfterAct => {
+        if self.downs.load(Ordering::SeqCst) == 0 {
+          "standing"
+        } else {
+          "ended"
+        }
+      }
+      Clear::Never => "standing",
+    }
   }
 }
 
@@ -98,9 +141,16 @@ impl Running for Scripted {
   }
 
   fn open<'a>(&'a self, url: &'a str) -> Answer<'a, WebResult<()>> {
+    let _ = url;
     Box::pin(async move {
-      self.opening.fetch_add(1, Ordering::SeqCst);
-      self.seen.lock().unwrap().opens.push(url.to_owned());
+      let at = if self.cleared.load(Ordering::SeqCst) {
+        2
+      } else {
+        self.opening.fetch_add(1, Ordering::SeqCst) + 1
+      };
+
+      self.opening.store(at, Ordering::SeqCst);
+      self.seen.lock().unwrap().opens += 1;
       let phase = self.phase();
       *self.watch.response.lock().unwrap() = Some(DocumentResponse {
         status: phase.status,
@@ -116,15 +166,17 @@ impl Running for Scripted {
       if expression == STILL {
         self.seen.lock().unwrap().markers += 1;
 
-        return Ok(self.stills.lock().unwrap().next());
+        return Ok(Value::from(self.still()));
       }
 
-      if expression == BOX {
-        self.seen.lock().unwrap().boxes += 1;
+      if expression == STAGE {
+        self.seen.lock().unwrap().stages += 1;
 
-        return Ok(self.points.lock().unwrap().next());
+        return Ok(self.stage.clone());
       }
 
+      // The page's own words, as the loop reads them when the site ends a challenge: asked of the snapshot
+      // expression too, so the whole-page read is answered by name before the plain text of the page.
       if expression.contains("document.links") {
         let phase = self.phase();
 
@@ -141,6 +193,10 @@ impl Running for Scripted {
         }));
       }
 
+      if expression.contains("innerText") {
+        return Ok(Value::from(self.phase().text));
+      }
+
       Err(WebError::new(
         "the stand-in browser was asked to read something it does not hold",
         Failure::Transport,
@@ -148,11 +204,56 @@ impl Running for Scripted {
     })
   }
 
-  fn click<'a>(&'a self, x: f64, y: f64) -> Answer<'a, WebResult<()>> {
+  fn gesture<'a>(&'a self, at: &'a Gesture) -> Answer<'a, WebResult<()>> {
     Box::pin(async move {
-      self.seen.lock().unwrap().clicks.push((x, y));
+      let mut seen = self.seen.lock().unwrap();
+
+      match at {
+        Gesture::Move { x, y: _ } => {
+          seen.moves += 1;
+          seen.farthest_x = seen.farthest_x.max(*x);
+        }
+        Gesture::Down { x, y } => {
+          self.downs.fetch_add(1, Ordering::SeqCst);
+          seen.downs += 1;
+          seen.down_at = Some((*x, *y));
+        }
+        Gesture::Up { x, y } => {
+          self.ups.fetch_add(1, Ordering::SeqCst);
+          seen.ups += 1;
+          seen.up_at = Some((*x, *y));
+        }
+      }
+
+      drop(seen);
+
+      if self.clear == Clear::OnRelease && self.ups.load(Ordering::SeqCst) > 0 {
+        self.cleared.store(true, Ordering::SeqCst);
+      }
 
       Ok(())
+    })
+  }
+
+  fn keys<'a>(&'a self, text: &'a str, enter: bool) -> Answer<'a, WebResult<()>> {
+    Box::pin(async move {
+      let mut seen = self.seen.lock().unwrap();
+
+      seen.keys.push((text.to_owned(), enter));
+
+      if self.clear == Clear::OnKeys {
+        self.cleared.store(true, Ordering::SeqCst);
+      }
+
+      Ok(())
+    })
+  }
+
+  fn screenshot<'a>(&'a self) -> Answer<'a, WebResult<Vec<u8>>> {
+    Box::pin(async move {
+      self.seen.lock().unwrap().shots += 1;
+
+      Ok(b"fake-png".to_vec())
     })
   }
 
@@ -167,6 +268,21 @@ impl Running for Scripted {
   fn shut_down(self: Box<Self>) -> Answer<'static, ()> {
     Box::pin(async {})
   }
+}
+
+fn script(phases: Vec<Phase>, stage: Value, clear: Clear) -> Arc<Scripted> {
+  Arc::new(Scripted {
+    phases,
+    opening: AtomicUsize::new(0),
+    stage,
+    clear,
+    downs: AtomicUsize::new(0),
+    ups: AtomicUsize::new(0),
+    watches: AtomicUsize::new(0),
+    cleared: AtomicBool::new(false),
+    seen: Mutex::new(Seen::default()),
+    watch: PageWatch::default(),
+  })
 }
 
 // A started browser is the script itself, boxed; the script outlives any one start.
@@ -203,8 +319,16 @@ impl Running for Started {
     Scripted::evaluate(self, expression)
   }
 
-  fn click<'a>(&'a self, x: f64, y: f64) -> Answer<'a, WebResult<()>> {
-    Scripted::click(self, x, y)
+  fn gesture<'a>(&'a self, at: &'a Gesture) -> Answer<'a, WebResult<()>> {
+    Scripted::gesture(self, at)
+  }
+
+  fn keys<'a>(&'a self, text: &'a str, enter: bool) -> Answer<'a, WebResult<()>> {
+    Scripted::keys(self, text, enter)
+  }
+
+  fn screenshot<'a>(&'a self) -> Answer<'a, WebResult<Vec<u8>>> {
+    Scripted::screenshot(self)
   }
 
   fn watch(&self) -> &PageWatch {
@@ -212,7 +336,7 @@ impl Running for Started {
   }
 
   fn rested(&self) -> bool {
-    Scripted::rested(self)
+    true
   }
 
   fn shut_down(self: Box<Self>) -> Answer<'static, ()> {
@@ -220,18 +344,24 @@ impl Running for Started {
   }
 }
 
-fn browser(script: &Arc<Scripted>) -> Browser {
+// One read of the gate, asked of the stand-in with the loop's bounds, the test's own clock and, where the round
+// needs a picture read, a stand-in vision road.
+async fn read(
+  script: &Arc<Scripted>,
+  solve: bool,
+  bounds: Bounds,
+  vision: Option<Arc<dyn Vision>>,
+) -> WebResult<BrowserDocument> {
   let guard: UrlGuard = Arc::new(|_| Box::pin(async { Ok(None) }));
+  let browser = Browser::new(guard, Box::new(ScriptedStart(script.clone())));
 
-  Browser::new(guard, Box::new(ScriptedStart(script.clone())))
-}
-
-async fn read(browser: &Browser, solve: bool) -> WebResult<BrowserDocument> {
   browser
     .read(
       "https://gate.example/asked",
       FetchOptions {
         solve_challenge: solve,
+        bounds,
+        vision,
         clock: StandingClock::at(1_000_000),
         ..FetchOptions::default()
       },
@@ -243,67 +373,315 @@ fn seen(script: &Arc<Scripted>) -> Seen {
   std::mem::take(&mut *script.seen.lock().unwrap())
 }
 
-// The read asks, the site's own check passes before anything is clicked, and the page is opened exactly once
-// more.
-#[tokio::test(start_paused = true)]
+fn checkbox(x: f64, y: f64) -> Value {
+  json!({ "dpr": 1, "boxPoint": { "x": x, "y": y }, "slider": null, "input": null })
+}
+
+fn nothing() -> Value {
+  json!({ "dpr": 1, "boxPoint": null, "slider": null, "input": null })
+}
+
+// The vision road as a test stands in for it: it answers the loop's one question with what it was handed.
+struct Reader(Value);
+
+impl Vision for Reader {
+  fn read<'a>(&'a self, png: &'a [u8], ask: &'a str) -> Answer<'a, WebResult<Value>> {
+    let said = self.0.clone();
+    assert_eq!(ask, ASK, "the loop asks its one question of every picture");
+    assert_eq!(png, b"fake-png", "what it is shown is the screen itself");
+
+    Box::pin(async move { Ok(said) })
+  }
+
+  fn road(&self) -> &'static str {
+    "the test road"
+  }
+}
+
+fn eye(answer: Value) -> Option<Arc<dyn Vision>> {
+  Some(Arc::new(Reader(answer)))
+}
+
+// The site's own check ends the stage before anything is moved: the loop waits it out, the page is opened
+// exactly once more, and the account names no act of its own.
+#[tokio::test]
 async fn a_challenge_that_passes_its_own_check_is_answered_with_the_page_behind_it() {
-  let script = Scripted::of(vec![gate(), page()], vec![true.into(), false.into()], vec![]);
-  let document = read(&browser(&script), true).await.unwrap();
+  let script = script(vec![gate(), page()], nothing(), Clear::OnWatch);
+  let document = read(&script, true, Bounds::default(), None).await.unwrap();
 
   assert_eq!(document.text, "what the site really says");
-  assert_eq!(document.challenge, ChallengeMark::Cleared);
+  let ChallengeMark::Cleared(tried) = document.challenge else {
+    panic!("the read was cleared")
+  };
+  assert_eq!(tried.outcome, Outcome::Cleared);
+  assert_eq!(tried.rounds, 1, "the first round's wait, with nothing acted on");
+  assert!(tried.log.is_empty(), "the loop did nothing: {:?}", tried.log);
   let saw = seen(&script);
-  assert_eq!(saw.opens, ["https://gate.example/asked", "https://gate.example/asked"]);
-  assert!(saw.clicks.is_empty(), "a check that passes on its own is never clicked");
-  assert_eq!(saw.boxes, 0);
-}
-
-// The check does not pass alone: the box is clicked once, at the point the page itself named, and the page is
-// then opened once more.
-#[tokio::test(start_paused = true)]
-async fn a_challenge_that_stands_until_clicked_is_clicked_once_at_its_own_box() {
-  // The first wait is spent at its bound — twenty-half-second looks and the last one that finds the bound
-  // spent, all standing — so the click, not the wait, is what clears it.
-  let mut stills = vec![Value::from(true); 21];
-  stills.push(Value::from(false));
-  let script = Scripted::of(vec![gate(), page()], stills, vec![json!({ "x": 131, "y": 320 })]);
-  let document = read(&browser(&script), true).await.unwrap();
-
-  assert_eq!(document.text, "what the site really says");
-  assert_eq!(document.challenge, ChallengeMark::Cleared);
-  let saw = seen(&script);
-  assert_eq!(saw.opens.len(), 2);
-  assert_eq!(saw.clicks, [(131.0, 320.0)]);
-}
-
-// Nothing moves the page: the waits are spent at their bound — twenty looks of half a second each — the
-// retry is opened once, and the gate answers again.
-#[tokio::test(start_paused = true)]
-async fn a_challenge_that_stands_is_attempted_once_and_marked_as_it_stands() {
-  let script = Scripted::of(vec![gate()], vec![true.into()], vec![Value::Null]);
-  let document = read(&browser(&script), true).await.unwrap();
-
-  assert_eq!(document.title, "Just a moment...");
-  assert_eq!(document.challenge, ChallengeMark::Remains);
-  let saw = seen(&script);
-  assert_eq!(saw.opens.len(), 2, "the read retried once and no more");
-  assert!(saw.clicks.is_empty(), "the page named no box to click");
   assert_eq!(
-    saw.markers, 21,
-    "the bound of ten seconds was looked at once per half second, and once more when it was spent"
+    (saw.markers, saw.stages),
+    (2, 0),
+    "the round ended on its watch, before any stage probe"
+  );
+  assert_eq!((saw.downs, saw.ups), (0, 0), "a check that passes on its own is never clicked");
+  assert_eq!(saw.opens, 2, "the first read and the one retry");
+  assert!(tried.said().starts_with("cleared in 1 round(s): nothing to act on"), "{}", tried.said());
+}
+
+// The check does not pass alone: the box is clicked once, at the point the page itself named, on a path the
+// hand walked rather than jumped to.
+#[tokio::test]
+async fn a_checkbox_is_clicked_once_on_a_walked_path() {
+  let script = script(vec![gate(), page()], checkbox(131.0, 320.0), Clear::OnRelease);
+  let document = read(&script, true, Bounds::default(), None).await.unwrap();
+
+  let ChallengeMark::Cleared(tried) = document.challenge else {
+    panic!("the loop was to clear it")
+  };
+  assert_eq!(tried.log, ["clicked its box".to_owned()]);
+  assert_eq!(tried.rounds, 1);
+  let saw = seen(&script);
+  assert_eq!((saw.downs, saw.ups), (1, 1), "one press, one release");
+  assert_eq!(saw.down_at, Some((131.0, 320.0)), "pressed at the point the page named");
+  assert_eq!(saw.up_at, Some((131.0, 320.0)), "released over it");
+  assert!(saw.moves >= 8, "the hand walked a path of several moves, not a jump: {}", saw.moves);
+  assert!(
+    saw.markers >= 22,
+    "the round's wait was spent before the act, and the act was watched after"
   );
 }
 
-// A read that does not ask: the gate is read as it stands, with no marker asked and no second opening.
-#[tokio::test(start_paused = true)]
-async fn a_read_that_does_not_ask_never_probes_and_never_retries() {
-  let script = Scripted::of(vec![gate()], vec![false.into()], vec![]);
-  let document = read(&browser(&script), false).await.unwrap();
+// A slider is pulled to the gap the ported ddddocr matcher read out of the pictures the page itself carried,
+// and the pull walks past its gap and settles back on it.
+#[tokio::test]
+async fn a_slider_is_pulled_to_the_gap_the_ported_matcher_reads() {
+  let (board, piece) = slider_pictures(300);
+  let stage = json!({
+    "dpr": 1,
+    "boxPoint": null,
+    "slider": {
+      "x": 40.0, "y": 200.0, "boardX": 0.0, "boardScale": 1.0,
+      "piece": base64_of(&piece), "background": base64_of(&board),
+    },
+    "input": null,
+  });
+  let script = script(vec![gate(), page()], stage, Clear::OnRelease);
+  let document = read(&script, true, Bounds::default(), None).await.unwrap();
 
-  assert_eq!(document.title, "Just a moment...");
+  let ChallengeMark::Cleared(tried) = document.challenge else {
+    panic!("the pull was to clear it: {:?}", document.challenge)
+  };
+  assert!(
+    tried.log[0].contains("ddddocr"),
+    "the matcher is named as what read the gap: {:?}",
+    tried.log
+  );
+  let saw = seen(&script);
+  assert_eq!(saw.downs, 1, "one press, on the handle");
+  assert_eq!(saw.down_at.map(|(x, _)| x), Some(40.0), "pressed where the handle stands");
+  let up_x = saw.up_at.expect("the pull ended in a release").0;
+  assert!((296.0..=306.0).contains(&up_x), "released over the gap the matcher read: {up_x}");
+  assert!(
+    saw.farthest_x > up_x + 4.0,
+    "the pull overshot its gap, as a hand's does: {}",
+    saw.farthest_x
+  );
+  assert!(saw.moves >= 14, "the pull is walked: {} moves", saw.moves);
+}
+
+// Where the page carries no pictures that could be copied, the round is read off the screen by the vision
+// road, and the gap it names is set onto the board the page showed.
+#[tokio::test]
+async fn a_slider_without_pictures_is_read_off_the_screen() {
+  let stage = json!({
+    "dpr": 1, "boxPoint": null,
+    "slider": { "x": 40.0, "y": 200.0, "boardX": 10.0, "boardScale": 1.0, "piece": null, "background": null },
+    "input": null,
+  });
+  let script = script(vec![gate(), page()], stage, Clear::OnRelease);
+  let document = read(
+    &script,
+    true,
+    Bounds::default(),
+    eye(json!({
+      "kind": "slider", "gap_x": 300, "text": null, "click": null,
+    })),
+  )
+  .await
+  .unwrap();
+
+  let ChallengeMark::Cleared(tried) = document.challenge else {
+    panic!("the vision pull was to clear it")
+  };
+  assert!(tried.log[0].contains("the vision road read"), "{:?}", tried.log);
+  let saw = seen(&script);
+  assert_eq!(saw.shots, 1, "one look at the screen for the one round that needed it read");
+  assert_eq!(saw.down_at.map(|(x, _)| x), Some(40.0));
+  let up_x = saw.up_at.expect("released").0;
+  assert!(
+    (306.0..=316.0).contains(&up_x),
+    "the board's own x 10 plus the 300 the road read: {up_x}"
+  );
+}
+
+// Words a text prompt asks for are typed through the browser's key path and answered with Enter.
+#[tokio::test]
+async fn a_text_prompt_is_answered_through_the_key_path() {
+  let stage = json!({ "dpr": 1, "boxPoint": null, "slider": null, "input": { "x": 300.0, "y": 140.0 } });
+  let script = script(vec![gate(), page()], stage, Clear::OnKeys);
+  let document = read(
+    &script,
+    true,
+    Bounds::default(),
+    eye(json!({
+      "kind": "text", "text": "7349", "gap_x": null, "click": null,
+    })),
+  )
+  .await
+  .unwrap();
+
+  let ChallengeMark::Cleared(tried) = document.challenge else {
+    panic!("the answer was to clear it")
+  };
+  assert!(tried.log[0].starts_with("answered its words"), "{:?}", tried.log);
+  assert!(tried.log[0].contains("7349"));
+  let saw = seen(&script);
+  assert_eq!(saw.keys, [("7349".to_owned(), true)], "the words, with one Enter");
+  assert_eq!(saw.down_at, Some((300.0, 140.0)), "the field is clicked before it is typed into");
+}
+
+// Nothing moves a hard gate: the loop spends its rounds and stops at its bound, and the account says both the
+// rounds and the bound, and never that it solved anything.
+#[tokio::test]
+async fn a_hard_gate_stops_at_the_round_bound_saying_so() {
+  let script = script(vec![gate()], nothing(), Clear::Never);
+  let document = read(
+    &script,
+    true,
+    Bounds {
+      rounds: 3,
+      ms: 90_000,
+    },
+    None,
+  )
+  .await
+  .unwrap();
+
+  assert_eq!(document.title, "Just a moment...", "the gate answers again after the retry");
+  let ChallengeMark::Remains(tried) = document.challenge else {
+    panic!("the gate was to stand")
+  };
+  assert_eq!(
+    tried.outcome,
+    Outcome::Stopped {
+      at: "the round bound"
+    }
+  );
+  assert_eq!(tried.rounds, 3);
+  assert_eq!(tried.log.len(), 6, "every round names its act and what the page said after it");
+  assert!(
+    tried
+      .log
+      .iter()
+      .all(|one| *one == "watched its check run" || *one == "the challenge still stood")
+  );
+  let said = tried.said();
+  assert!(said.contains("attempted over 3 round(s)"), "{said}");
+  assert!(said.contains("stopped at the round bound"), "{said}");
+  assert!(said.contains("the challenge was not solved"), "{said}");
+  let saw = seen(&script);
+  assert_eq!(saw.opens, 2, "the read retried once and no more");
+  assert!(
+    saw.markers > 3 * 40,
+    "every round's wait was looked at once per half second: {}",
+    saw.markers
+  );
+}
+
+// The time bound stops the loop the same honest way, naming itself.
+#[tokio::test]
+async fn a_hard_gate_stops_at_the_time_bound_naming_it() {
+  let script = script(vec![gate()], nothing(), Clear::Never);
+  let document = read(
+    &script,
+    true,
+    Bounds {
+      rounds: 50,
+      ms: 21_000,
+    },
+    None,
+  )
+  .await
+  .unwrap();
+
+  let ChallengeMark::Remains(tried) = document.challenge else {
+    panic!("the gate was to stand")
+  };
+  assert_eq!(
+    tried.outcome,
+    Outcome::Stopped {
+      at: "the time bound"
+    }
+  );
+  assert!(tried.said().contains("stopped at the time bound"), "{}", tried.said());
+}
+
+// The site's own wrong-answer wording closes the loop inside its bounds, and the account says who closed it.
+#[tokio::test]
+async fn a_challenge_the_site_ends_is_told_as_the_sites_own_end() {
+  let script = script(vec![refusing()], checkbox(131.0, 320.0), Clear::EndsAfterAct);
+  let document = read(&script, true, Bounds::default(), None).await.unwrap();
+
+  let ChallengeMark::Remains(tried) = document.challenge else {
+    panic!("the site was to end it")
+  };
+  let Outcome::Ended { why } = &tried.outcome else {
+    panic!("the account names the site's own end: {:?}", tried.outcome)
+  };
+  assert!(why.contains("Too many failed attempts"), "said with the page's own words: {why}");
+  assert_eq!(tried.rounds, 1, "the loop spent no further round on a gate the site had closed");
+  assert_eq!(tried.log, ["clicked its box".to_owned()]);
+  let said = tried.said();
+  assert!(said.contains("ended by the site itself after 1 round(s)"), "{said}");
+  assert!(!said.contains("not solved"), "what ended it is said, no solve claimed: {said}");
+}
+
+// A read that does not ask for the loop never probes it: no marker, no stage, no second opening.
+#[tokio::test]
+async fn a_read_that_does_not_ask_never_probes_and_never_retries() {
+  let script = script(vec![gate()], checkbox(1.0, 1.0), Clear::OnRelease);
+  let document = read(&script, false, Bounds::default(), None).await.unwrap();
+
   assert_eq!(document.challenge, ChallengeMark::NotAttempted);
   let saw = seen(&script);
-  assert_eq!(saw.opens.len(), 1);
-  assert_eq!(saw.markers, 0);
-  assert_eq!(saw.boxes, 0);
+  assert_eq!((saw.opens, saw.markers, saw.stages), (1, 0, 0));
+}
+
+// A board with its hole at `gap` and the piece that fits it, as the two PNG byte strings the page's probe
+// would have carried.
+fn slider_pictures(gap: u32) -> (Vec<u8>, Vec<u8>) {
+  let board: RgbaImage = ImageBuffer::from_fn(360, 120, |x, y| {
+    if (gap..gap + 44).contains(&x) && (38..82).contains(&y) {
+      Rgba([30, 30, 30, 255])
+    } else {
+      Rgba([210, 200, 190, 255])
+    }
+  });
+  let piece: RgbaImage = ImageBuffer::from_fn(44, 44, |_, _| Rgba([210, 200, 190, 255]));
+
+  (png(&board), png(&piece))
+}
+
+fn png(picture: &RgbaImage) -> Vec<u8> {
+  let mut out = Vec::new();
+
+  DynamicImage::ImageRgba8(picture.clone())
+    .write_to(&mut Cursor::new(&mut out), ImageFormat::Png)
+    .unwrap();
+  out
+}
+
+fn base64_of(bytes: &[u8]) -> String {
+  use base64::Engine;
+
+  base64::engine::general_purpose::STANDARD.encode(bytes)
 }

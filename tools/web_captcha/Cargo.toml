@@ -1,6 +1,6 @@
 [package]
 name = "web-captcha-tool"
-description = "The forcing read's executable: one page in the real browser with a challenge met on the way attempted once."
+description = "The forcing read's executable: one page in the real browser with a challenge met on the way worked as a bounded loop of rounds."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

@@ -9,11 +9,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use base64::Engine;
 use serde_json::{Value, json};
 use tokio::process::{Child, Command};
 
 use super::{
-  Answer, PageWatch, Product, Running, UrlGuard, display, fails_the_page, is_web, locked,
+  Answer, Gesture, PageWatch, Product, Running, UrlGuard, display, fails_the_page, is_web, locked,
   navigation_failure, places, profile, proxy, remote,
 };
 use crate::web::clock::now_ms;
@@ -454,26 +455,83 @@ impl Running for ChromeRunning {
     })
   }
 
-  // One person's click at a point of the view: a press and a release over the same whole pixel, through the
-  // input domain, so the widget takes it as trusted.
-  fn click<'a>(&'a self, x: f64, y: f64) -> Answer<'a, WebResult<()>> {
+  // Pointer events through the input domain, so the widget takes them as a person's hand; the walk between
+  // them is the caller's.
+  fn gesture<'a>(&'a self, at: &'a Gesture) -> Answer<'a, WebResult<()>> {
     Box::pin(async move {
-      let (x, y) = super::challenge::click_point(x, y);
-      let sender = &self.connection.sender;
+      let (kind, x, y) = match at {
+        Gesture::Move { x, y } => ("mouseMoved", x, y),
+        Gesture::Down { x, y } => ("mousePressed", x, y),
+        Gesture::Up { x, y } => ("mouseReleased", x, y),
+      };
+      let (x, y) = super::whole(*x, *y);
+      let held = kind == "mousePressed";
 
-      sender
+      self
+        .connection
+        .sender
         .command(
           "Input.dispatchMouseEvent",
-          json!({ "type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1, "buttons": 1 }),
-        )
-        .await?;
-      sender
-        .command(
-          "Input.dispatchMouseEvent",
-          json!({ "type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1, "buttons": 0 }),
+          json!({
+            "type": kind,
+            "x": x,
+            "y": y,
+            "button": if kind == "mouseMoved" { "none" } else { "left" },
+            "clickCount": if kind == "mouseMoved" { 0 } else { 1 },
+            "buttons": if held { 1 } else { 0 },
+          }),
         )
         .await
         .map(|_| ())
+    })
+  }
+
+  // Words as one insert and Enter as its two key events, through the same trusted domain.
+  fn keys<'a>(&'a self, text: &'a str, enter: bool) -> Answer<'a, WebResult<()>> {
+    Box::pin(async move {
+      let sender = &self.connection.sender;
+
+      if !text.is_empty() {
+        sender.command("Input.insertText", json!({ "text": text })).await?;
+      }
+
+      if enter {
+        for kind in ["keyDown", "keyUp"] {
+          sender
+            .command(
+              "Input.dispatchKeyEvent",
+              json!({
+                "type": kind,
+                "key": "Enter",
+                "code": "Enter",
+                "windowsVirtualKeyCode": 13,
+                "nativeVirtualKeyCode": 13,
+              }),
+            )
+            .await?;
+        }
+      }
+
+      Ok(())
+    })
+  }
+
+  // The view as a PNG, through the page domain.
+  fn screenshot<'a>(&'a self) -> Answer<'a, WebResult<Vec<u8>>> {
+    Box::pin(async move {
+      let shot = self
+        .connection
+        .sender
+        .command("Page.captureScreenshot", json!({ "format": "png" }))
+        .await?;
+      let data = shot["data"]
+        .as_str()
+        .ok_or_else(|| WebError::new("Chrome answered no picture for the screen", Failure::Transport))?;
+      let png = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|_| WebError::new("Chrome's picture did not read as base64", Failure::Transport))?;
+
+      Ok(png)
     })
   }
 

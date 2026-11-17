@@ -20,14 +20,15 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+use base64::Engine;
 use serde_json::{Value, json};
 use tokio::io::AsyncBufReadExt;
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::task::JoinHandle;
 
 use super::{
-  Answer, DocumentResponse, PageWatch, Product, Running, UrlGuard, copy, display, fails_the_page, is_web,
-  locked, navigation_failure, places, profile, proxy, remote,
+  Answer, DocumentResponse, Gesture, PageWatch, Product, Running, UrlGuard, copy, display, fails_the_page,
+  is_web, locked, navigation_failure, places, profile, proxy, remote,
 };
 use crate::web::clock::now_ms;
 use crate::web::error::{Failure, WebError, WebResult};
@@ -741,11 +742,19 @@ impl Running for FirefoxRunning {
     })
   }
 
-  // One person's click at a point of the view, through the BiDi input domain: a pointer that moves, presses
-  // and releases, so the widget takes it as trusted.
-  fn click<'a>(&'a self, x: f64, y: f64) -> Answer<'a, WebResult<()>> {
+  // One pointer event per call through the BiDi input domain; the walk between the events is the caller's,
+  // and a widget takes the press and release as a person's because they come from here.
+  fn gesture<'a>(&'a self, at: &'a Gesture) -> Answer<'a, WebResult<()>> {
     Box::pin(async move {
-      let (x, y) = super::challenge::click_point(x, y);
+      let event = match at {
+        Gesture::Move { x, y } => {
+          let (x, y) = super::whole(*x, *y);
+
+          json!({ "type": "pointerMove", "x": x, "y": y, "duration": 60 })
+        }
+        Gesture::Down { .. } => json!({ "type": "pointerDown", "button": 0, "duration": 10 }),
+        Gesture::Up { .. } => json!({ "type": "pointerUp", "button": 0, "duration": 10 }),
+      };
 
       self
         .connection()
@@ -758,17 +767,68 @@ impl Running for FirefoxRunning {
               "type": "pointer",
               "id": "web-solver",
               "parameters": { "pointerType": "mouse" },
-              "actions": [
-                { "type": "pointerMove", "x": x, "y": y, "duration": 100 },
-                { "type": "pointerDown", "button": 0, "duration": 10 },
-                { "type": "pause", "duration": 80 },
-                { "type": "pointerUp", "button": 0, "duration": 10 },
-              ],
+              "actions": [event],
             }],
           }),
         )
         .await
         .map(|_| ())
+    })
+  }
+
+  // Every word and, when asked, Enter — the BiDi keyboard source, one key up behind every key down.
+  fn keys<'a>(&'a self, text: &'a str, enter: bool) -> Answer<'a, WebResult<()>> {
+    Box::pin(async move {
+      let mut events: Vec<Value> = text
+        .chars()
+        .flat_map(|one| {
+          [
+            json!({ "type": "keyDown", "value": one.to_string() }),
+            json!({ "type": "keyUp", "value": one.to_string() }),
+          ]
+        })
+        .collect();
+
+      if enter {
+        // Enter as the WebDriver key of its own.
+        events.push(json!({ "type": "keyDown", "value": "" }));
+        events.push(json!({ "type": "keyUp", "value": "" }));
+      }
+
+      self
+        .connection()
+        .sender
+        .command(
+          "input.performActions",
+          json!({
+            "context": self.launch.context,
+            "actions": [{ "type": "key", "id": "web-voice", "actions": events }],
+          }),
+        )
+        .await
+        .map(|_| ())
+    })
+  }
+
+  // The view as a PNG, through the BiDi picture command the same browser answers its driver with.
+  fn screenshot<'a>(&'a self) -> Answer<'a, WebResult<Vec<u8>>> {
+    Box::pin(async move {
+      let shot = self
+        .connection()
+        .sender
+        .command(
+          "browsingContext.captureScreenshot",
+          json!({ "context": self.launch.context, "format": { "type": "image/png" } }),
+        )
+        .await?;
+      let data = shot["data"]
+        .as_str()
+        .ok_or_else(|| WebError::new("Firefox answered no picture for the screen", Failure::Transport))?;
+      let png = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|_| WebError::new("Firefox's picture did not read as base64", Failure::Transport))?;
+
+      Ok(png)
     })
   }
 
