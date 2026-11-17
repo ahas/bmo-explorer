@@ -445,7 +445,10 @@
   the tool may call his model from inside itself. The question names the shapes the answer may take and asks
   for one JSON object: what kind of stage this stands for, where a box or a pick stands, where a slider's gap
   stands, or what words to type. What comes back is acted on as a suggestion, and where no key for that gateway
-  stands in the data root, or the reading fails, the round acts on what the page itself showed.
+  stands in the data root, or the reading fails, the round acts on what the page itself showed. The road's
+  address, model name and key file are read from `BMO_VISION_ADDRESS`, `BMO_VISION_MODEL` and
+  `BMO_VISION_KEY_FILE`, each falling back to the gateway of this deployment, the `flash-next-coder` pool the
+  eye's see road stands on, and `llm-gateway.key` under the data root's `env/`.
 - **The gap of a slider:** where the page carried its two pictures, the hole is read by the two slider
   algorithms of ddddocr (MIT licence) re-expressed as plain Rust over the picture library this repository
   already stands on — an edge-matching read of the piece over the board, and a column-difference read for a
