@@ -423,6 +423,14 @@
     widget's box, a slider's handle over its board, a field the site asks words in, or nothing at all to act
     on. The probe names those places in the page's own view, and for a slider it also carries the two pictures
     of it, copied through the page where that copy stands untainted.
+  - **Take the browser's own drag off a slider handle:** where the probe names a handle, that handle is first
+    asked not to start the browser's native image drag, and a drag start it still answers, its own or from a
+    picture inside it, is cancelled where the handle stands. Without this a plain image handle, which is what
+    several slider widgets are built from, swallows the walked press as a picture being moved and the piece
+    never follows the pointer. A widget that answers only the browser's own drag and drop is not moved by this
+    road either way, so taking the drag off costs nothing of what could have worked. Apart from scrolling a
+    named part into view, this write is all the loop changes of the page itself, and the page's next load
+    undoes it.
   - **Act through the browser's own input,** never an event dispatched into the page: a press and a release
     over one point for a box, a press, a pull and a release for a slider, keys and one Enter for words asked
     of a field. Every one of them is walked rather than jumped.

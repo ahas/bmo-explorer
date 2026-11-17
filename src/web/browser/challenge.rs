@@ -103,6 +103,16 @@ pub const STAGE: &str = r#"(() => {
   if (handle && board && /(slide|drag|handler|handle|knob|captcha|verify)/i.test(said(handle) + " " + said(board))) {
     const hr = show(handle), br = show(board);
     if (hr && br && br.width > hr.width * 2) {
+      // A plain image handle is a native drag source, so the browser takes a walked press on it as its picture
+      // being moved and the widget's own listeners never see the pull. The handle is asked not to drag, and a
+      // drag start it still answers, its own or from a picture inside it, is cancelled where it stands.
+      handle.setAttribute("draggable", "false");
+
+      if (!handle.dataset.dragOff) {
+        handle.dataset.dragOff = "1";
+        handle.addEventListener("dragstart", (event) => event.preventDefault(), true);
+      }
+
       const copy = (el) => {
         try {
           if (el.tagName !== "IMG" || !el.complete || !el.naturalWidth) return null;

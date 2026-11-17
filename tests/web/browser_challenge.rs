@@ -1,7 +1,8 @@
 //! The reasoning loop a fetch road browser read makes at a challenge (docs/web-access.md, 「When the browser
 //! meets a challenge」), driven against a stand-in product that records every trusted gesture and key the loop
-//! sends: what it waits through, what it clicks and pulls and types, the shape of the walk it walks, and where
-//! it stops. The clock is a standing one throughout, so a round's waits cost the test nothing.
+//! sends: what it waits through, what it clicks and pulls and types, the shape of the walk it walks, where it
+//! stops, and whether a widget was let to move its piece at all. The clock is a standing one throughout, so a
+//! round's waits cost the test nothing.
 
 use std::io::Cursor;
 use std::sync::Arc;
@@ -67,18 +68,33 @@ struct Seen {
   down_at: Option<(f64, f64)>,
   up_at: Option<(f64, f64)>,
   farthest_x: f64,
+  /// Where the scripted slider's piece stands, as far as the widget let it move.
+  piece_at: Option<f64>,
+  /// How often a stage probe was handed to this widget asking the handle's native drag off.
+  disarms: usize,
   keys: Vec<(String, bool)>,
 }
 
-// How the scripted gate comes off: under its own check, under a release, under an answer, or by the site's own
-// refusal — or never.
+// How the scripted gate comes off: under its own check, under a release, under a release whose handle had its
+// native drag taken off, under an answer, or by the site's own refusal — or never.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Clear {
   OnWatch,
   OnRelease,
+  OnDisarmedRelease,
   OnKeys,
   EndsAfterAct,
   Never,
+}
+
+// A page feels what its own script asks of it, so the stand-in for a slider widget built from a plain image
+// handle judges the probe it is handed by the two requests made of that handle: its drag ability written off,
+// and its drag start cancelled. Where they are not made of the handle, the widget's picture is being moved and
+// its piece never follows the pointer.
+fn asks_the_drag_off(probe: &str) -> bool {
+  probe.contains(r#"handle.setAttribute("draggable", "false")"#)
+    && probe.contains(r#"handle.addEventListener("dragstart""#)
+    && probe.contains("preventDefault")
 }
 
 // The stand-in: a gate that comes off as the test scripts it, answering the loop's marker probe and its stage
@@ -92,6 +108,8 @@ struct Scripted {
   ups: AtomicUsize,
   watches: AtomicUsize,
   cleared: AtomicBool,
+  /// Whether a stage probe this widget was handed asked for the handle's native drag off.
+  disarmed: AtomicBool,
   seen: Mutex<Seen>,
   watch: PageWatch,
 }
@@ -116,12 +134,8 @@ impl Scripted {
           "gone"
         }
       }
-      Clear::OnRelease | Clear::OnKeys => {
-        if self.cleared.load(Ordering::SeqCst) {
-          "gone"
-        } else {
-          "standing"
-        }
+      Clear::OnRelease | Clear::OnDisarmedRelease | Clear::OnKeys => {
+        if self.cleared.load(Ordering::SeqCst) { "gone" } else { "standing" }
       }
       Clear::EndsAfterAct => {
         if self.downs.load(Ordering::SeqCst) == 0 {
@@ -170,7 +184,14 @@ impl Running for Scripted {
       }
 
       if expression == STAGE {
-        self.seen.lock().unwrap().stages += 1;
+        let mut seen = self.seen.lock().unwrap();
+
+        seen.stages += 1;
+
+        if asks_the_drag_off(expression) {
+          seen.disarms += 1;
+          self.disarmed.store(true, Ordering::SeqCst);
+        }
 
         return Ok(self.stage.clone());
       }
@@ -207,6 +228,7 @@ impl Running for Scripted {
   fn gesture<'a>(&'a self, at: &'a Gesture) -> Answer<'a, WebResult<()>> {
     Box::pin(async move {
       let mut seen = self.seen.lock().unwrap();
+      let mut piece_followed = false;
 
       match at {
         Gesture::Move { x, y: _ } => {
@@ -222,12 +244,24 @@ impl Running for Scripted {
           self.ups.fetch_add(1, Ordering::SeqCst);
           seen.ups += 1;
           seen.up_at = Some((*x, *y));
+
+          // A plain-image handle lets its piece follow only where the probe took its native drag off.
+          if self.clear == Clear::OnDisarmedRelease && self.disarmed.load(Ordering::SeqCst) {
+            seen.piece_at = Some(*x);
+            piece_followed = true;
+          }
         }
       }
 
       drop(seen);
 
-      if self.clear == Clear::OnRelease && self.ups.load(Ordering::SeqCst) > 0 {
+      let comes_off = match self.clear {
+        Clear::OnRelease => self.ups.load(Ordering::SeqCst) > 0,
+        Clear::OnDisarmedRelease => piece_followed,
+        _ => false,
+      };
+
+      if comes_off {
         self.cleared.store(true, Ordering::SeqCst);
       }
 
@@ -280,6 +314,7 @@ fn script(phases: Vec<Phase>, stage: Value, clear: Clear) -> Arc<Scripted> {
     ups: AtomicUsize::new(0),
     watches: AtomicUsize::new(0),
     cleared: AtomicBool::new(false),
+    disarmed: AtomicBool::new(false),
     seen: Mutex::new(Seen::default()),
     watch: PageWatch::default(),
   })
@@ -521,6 +556,45 @@ async fn a_slider_without_pictures_is_read_off_the_screen() {
     (306.0..=316.0).contains(&up_x),
     "the board's own x 10 plus the 300 the road read: {up_x}"
   );
+}
+
+// A slider widget built from a plain image handle swallows a walked press as its picture being moved, so the
+// probe takes that drag off the handle before naming it: only then does the piece follow the pull at all.
+#[tokio::test]
+async fn a_slider_handle_stops_dragging_before_the_round_pulls_it() {
+  assert!(
+    !asks_the_drag_off(STILL),
+    "the scripted widget judges the probe it is handed, not any script it is given"
+  );
+  let (board, piece) = slider_pictures(300);
+  let stage = json!({
+    "dpr": 1,
+    "boxPoint": null,
+    "slider": {
+      "x": 40.0, "y": 200.0, "boardX": 0.0, "boardScale": 1.0,
+      "piece": base64_of(&piece), "background": base64_of(&board),
+    },
+    "input": null,
+  });
+  let script = script(vec![gate(), page()], stage, Clear::OnDisarmedRelease);
+  let document = read(&script, true, Bounds::default(), None).await.unwrap();
+
+  let ChallengeMark::Cleared(tried) = document.challenge else {
+    panic!(
+      "the pull was to move the piece once the handle stopped dragging: {:?}",
+      document.challenge
+    )
+  };
+  assert_eq!(
+    tried.outcome,
+    Outcome::Cleared,
+    "the loop's own account, not the page it happened to answer"
+  );
+  assert_eq!(tried.rounds, 1, "the first pull moved the piece, once its drag was off");
+  let saw = seen(&script);
+  assert_eq!(saw.disarms, 1, "the probe that named the handle also took its native drag off");
+  assert!(saw.piece_at.is_some(), "a handle that was left draggable would have swallowed the pull");
+  assert_eq!(saw.piece_at, saw.up_at.map(|(x, _)| x), "the piece came to rest where the pull let go");
 }
 
 // Words a text prompt asks for are typed through the browser's key path and answered with Enter.
