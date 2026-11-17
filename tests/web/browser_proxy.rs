@@ -4,7 +4,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 
-use bmo_explorer::web::chrome::proxy::*;
+use bmo_explorer::web::browser::proxy::*;
 
 // An origin on loopback answering every request with what it was asked.
 async fn origin() -> u16 {

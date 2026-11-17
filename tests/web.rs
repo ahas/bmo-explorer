@@ -2,11 +2,13 @@
 //! they read the web through in `testing`.
 
 mod address;
-mod chrome;
-mod chrome_display;
-mod chrome_places;
-mod chrome_profile;
-mod chrome_proxy;
+mod browser;
+mod browser_copy;
+mod browser_display;
+mod browser_firefox;
+mod browser_places;
+mod browser_profile;
+mod browser_proxy;
 mod client;
 mod identity;
 mod jar;

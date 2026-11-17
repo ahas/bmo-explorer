@@ -113,7 +113,7 @@ fn mcp(data_root: PathBuf) -> Result<(), String> {
       .map_err(|why| format!("the MCP session did not start: {why}"))?;
     let ended = running.waiting().await;
 
-    // A Chrome the reading started ends with the session rather than outliving it.
+    // A browser the reading started ends with the session rather than outliving it.
     client.close().await;
     ended.map(|_| ()).map_err(|why| format!("the MCP session ended in a failure: {why}"))
   })

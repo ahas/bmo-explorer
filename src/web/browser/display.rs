@@ -1,5 +1,5 @@
-//! A virtual X server the web layer starts for a Chrome of its own (docs/web-access.md, 「How Chrome is started」), so a
-//! non-headless browser never opens a window on a person's desktop session, never reaches that session's
+//! A virtual X server the web layer starts for a browser of its own (docs/web-access.md, 「How the browser is
+//! started」), so a non-headless browser never opens a window on a person's desktop session, never reaches that session's
 //! D-Bus and never asks its keyring for anything. The server picks a free display number itself and accepts
 //! only the random cookie written beside it, and it dies with the process that started it.
 
@@ -13,7 +13,7 @@ use tokio::process::{Child, Command};
 
 use crate::web::error::{Failure, WebError, WebResult};
 
-/// A display standing for one Chrome.
+/// A display standing for one browser.
 pub struct PrivateDisplay {
   pub display: String,
   pub xauthority: PathBuf,
@@ -26,7 +26,7 @@ pub fn setpriv() -> String {
   std::env::var("BMO_SETPRIV_PATH").unwrap_or_else(|_| "/usr/bin/setpriv".into())
 }
 
-/// The environment a Chrome on a private display runs with: the caller's own, less every variable of a
+/// The environment a browser on a private display runs with: the caller's own, less every variable of a
 /// person's session, plus that display, a runtime directory of its own and a session bus switched off
 /// rather than looked for.
 pub fn detached_environment(

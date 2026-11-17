@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use bmo_explorer::web::chrome::profile::*;
+use bmo_explorer::web::browser::profile::*;
 
 // Processes that will not die for a number of looks, and a helper that writes the profile back once.
 struct Stubborn {

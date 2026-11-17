@@ -1,10 +1,10 @@
-//! One investigation's reading: slices, the session's cookies, and the fall back to the real Chrome.
+//! One investigation's reading: slices, the session's cookies, and the fall back to the real browser.
 
 use std::sync::{Arc, Mutex};
 
 use super::testing::{FakeBrowser, Web, answer, check, pdf_of};
-use bmo_explorer::web::chrome::{Arrived, Link};
-use bmo_explorer::web::chrome::{BrowserDocument, BrowserFetcher, FetchOptions};
+use bmo_explorer::web::browser::{Arrived, Link};
+use bmo_explorer::web::browser::{BrowserDocument, BrowserFetcher, FetchOptions};
 use bmo_explorer::web::clock::{Clock, StandingClock};
 use bmo_explorer::web::error::Failure;
 use bmo_explorer::web::pacing::MemoryPacing;

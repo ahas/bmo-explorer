@@ -1,5 +1,5 @@
 //! What a read of the web failed with, as every caller reads it: the kind of failure, the status and the
-//! address where they are known, and whether the real Chrome was tried after the direct read failed. It
+//! address where they are known, and whether the real browser was tried after the direct read failed. It
 //! crosses a socket as it stands, a site tool's road answered by the web helper, so the site contract
 //! names these without the web layer.
 
@@ -21,7 +21,7 @@ pub enum Failure {
   Transport,
   /// An HTTP error that a browser would meet too.
   Http,
-  /// The real Chrome, or a program this machine needs to read the page, could not be had.
+  /// The real browser, or a program this machine needs to read the page, could not be had.
   BrowserUnavailable,
 }
 
@@ -32,7 +32,7 @@ pub struct WebError {
   pub kind: Failure,
   pub status: Option<u16>,
   pub url: Option<String>,
-  /// Whether the real Chrome, opened after the direct read failed, failed the page too: both roads a
+  /// Whether the real browser, opened after the direct read failed, failed the page too: both roads a
   /// page is read by were tried.
   pub chrome_fallback: bool,
 }
@@ -59,7 +59,7 @@ impl WebError {
     self
   }
 
-  /// The same failure, marked as the real Chrome's after the direct read's.
+  /// The same failure, marked as the real browser's after the direct read's.
   pub fn after_chrome(mut self) -> Self {
     self.chrome_fallback = true;
     self

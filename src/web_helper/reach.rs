@@ -1,5 +1,5 @@
 //! The roads a site tool reaches its site by, as one record's web reading carries them (docs/site-contract.md,
-//! 「What a tool is given」): a page fetched as a browser asks for it, a page the real Chrome rendered, the
+//! 「What a tool is given」): a page fetched as a browser asks for it, a page the real browser rendered, the
 //! search engines, a document read as `web_fetch` reads it, and a head request. Each waits for its answer;
 //! none has a timeout of its own.
 
@@ -13,7 +13,7 @@ use reqwest::redirect::Policy;
 
 use crate::site::contract::{Arrival, PageHead, PageRequest, Reach, Rendered, Slice};
 use crate::web::address::{host_of, web_url};
-use crate::web::chrome::{Arrived, FetchOptions};
+use crate::web::browser::{Arrived, FetchOptions};
 use crate::web::client::{DIRECT_HOST_INTERVAL_MS, MAX_REDIRECTS};
 use crate::web::pacing::wait_for_host;
 use crate::web::search::{Search, SearchResults, SearchRoads, render_through, search_web};

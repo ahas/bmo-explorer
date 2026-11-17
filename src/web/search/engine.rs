@@ -15,7 +15,7 @@ use serde_json::Value;
 use url::Url;
 
 use crate::web::address::Check;
-use crate::web::chrome::BrowserDocument;
+use crate::web::browser::BrowserDocument;
 use crate::web::classify::{Disposition, Fetched, classify};
 use crate::web::client::{Direct, Transport};
 use crate::web::error::{Failure, WebError, WebResult};

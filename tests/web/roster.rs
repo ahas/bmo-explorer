@@ -1,6 +1,6 @@
 //! The settings built in beside the web layer's modules: the engine roster and the detached Chrome.
 
-use bmo_explorer::web::chrome::detached::DETACHED;
+use bmo_explorer::web::browser::detached::DETACHED;
 use bmo_explorer::web::search::roster::ROSTER;
 
 #[test]

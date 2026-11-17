@@ -86,7 +86,7 @@ impl Engine for Naver {
 
   // Naver's 접속 제한 page lists every cause it might have, whichever one it met. Measured from this machine
   // it answers every direct client at any pace and from every address of this network, which rules out the
-  // rate, and Naver's book pages are then served to a real Chrome; so it is read as the client's shape.
+  // rate, and Naver's book pages are then served to a real browser; so it is read as the client's shape.
   fn recognise(&self, answer: &EngineAnswer) -> Option<Diagnosis> {
     if answer.body.contains("접속이 일시적으로 제한") {
       return Some(Diagnosis {

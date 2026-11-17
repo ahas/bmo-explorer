@@ -1,13 +1,13 @@
-//! The one road out for a Chrome the web layer starts (docs/web-access.md, 「Chrome's network path」). Chrome is
-//! told to send everything through this proxy, so it never resolves a name and connects on its own: the
+//! The one road out for a browser the web layer starts (docs/web-access.md, 「The browser's network path」). The
+//! browser is told to send everything through this proxy, so it never resolves a name and connects on its own: the
 //! proxy asks the caller's check for the address a name may be reached at and connects to exactly that
 //! address, and a name the check refuses is never connected to at all.
 //!
-//! An https request passes as a tunnel, so TLS and the certificate check stay between Chrome and the site.
+//! An https request passes as a tunnel, so TLS and the certificate check stay between the browser and the site.
 //! A plain http request is sent on a connection of its own, and the connection ends with its answer, so one
 //! connection never carries a second request to another name.
 //!
-//! Nothing here has a timeout: a connection is waited for until it opens or fails, and a request until Chrome
+//! Nothing here has a timeout: a connection is waited for until it opens or fails, and a request until the browser
 //! has sent it whole or gone away.
 
 use std::convert::Infallible;
@@ -31,7 +31,18 @@ use tokio::task::{JoinHandle, JoinSet};
 pub type Resolver =
   Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<Option<IpAddr>, String>> + Send>> + Send + Sync>;
 
-/// A proxy standing for one Chrome; it stops when dropped.
+/// The resolver a browser's guard gives the proxy: the address the guard passes, or its refusal's words.
+pub fn resolver_of(guard: &super::UrlGuard) -> Resolver {
+  let guard = guard.clone();
+
+  Arc::new(move |url: String| {
+    let guard = guard.clone();
+
+    Box::pin(async move { guard(url).await.map_err(|error| error.message) })
+  })
+}
+
+/// A proxy standing for one browser; it stops when dropped.
 pub struct PinnedProxy {
   pub port: u16,
   serving: JoinHandle<()>,

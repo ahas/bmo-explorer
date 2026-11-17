@@ -1,4 +1,4 @@
-//! The machine's Chrome places (docs/web-access.md, 「Lifetime and cleanup」): a Chrome holds one for as long
+//! The machine's browser places (docs/web-access.md, 「Lifetime and cleanup」): a browser holds one for as long
 //! as it lives, so no more than this many run on the machine at once, whichever process started them. A
 //! place is an advisory lock on a file in the temporary directory — the same lock `flock(1)` takes, so
 //! every process on the machine counts the same places — let go with the process holding it however it ends.
@@ -56,7 +56,7 @@ pub async fn take_any(paths: &[PathBuf]) -> Result<Place, String> {
     }
 
     if !opened {
-      return Err(refusal.unwrap_or_else(|| "this machine names no Chrome place".to_owned()));
+      return Err(refusal.unwrap_or_else(|| "this machine names no browser place".to_owned()));
     }
 
     tokio::time::sleep(POLL).await;

@@ -545,6 +545,6 @@ pub fn render_through(session: Arc<crate::web::session::WebSession>) -> Render {
   Arc::new(move |url: String| {
     let session = session.clone();
 
-    Box::pin(async move { session.render(&url, false, crate::web::chrome::FetchOptions::default()).await })
+    Box::pin(async move { session.render(&url, false, crate::web::browser::FetchOptions::default()).await })
   })
 }

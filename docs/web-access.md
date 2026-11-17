@@ -22,14 +22,17 @@
   - One run of the MCP server (docs/api.md, 「The MCP server」): its client holds one reading for as
     long as the server runs.
 - **Two per-investigation cookie stores:** inside it, the direct HTTP client that reads pages and
-  the real Chrome each keep using their own cookie store, and both are discarded when the
+  the real browser each keep using their own cookie store, and both are discarded when the
   investigation ends.
+  - The real browser on the owner's profile (「Which browser」) starts from a copy of his profile, so its
+    store opens with his cookies and site sign-ins. What it gathers stays in that copy and is discarded
+    with it; nothing is ever written back into his profile.
 - **Nothing moves between the three:**
-  - An engine jar is never used for a page fetch and never handed to Chrome, and a page's or
-    Chrome's cookies never enter an engine jar.
-  - Cookies and credentials are never moved between the page client and Chrome.
+  - An engine jar is never used for a page fetch and never handed to the browser, and a page's or
+    the browser's cookies never enter an engine jar.
+  - Cookies and credentials are never moved between the page client and the browser.
   - Nothing of a page fetch is shared with another investigation.
-  - So logins and challenge cookies never leak into another investigation.
+  - So challenge cookies a site hands out never leak into another investigation.
 
 ### Identities and headers
 
@@ -45,9 +48,9 @@
     block is diagnosed as the client's shape. Changing identity per request would contradict the
     cookies the engine carries.
 - **No product or crawler tag** is added after the product name.
-- **Not a fingerprint patch:** an identity is the HTTP presentation an ordinary browser sends. It does
-  not alter what a real Chrome reports about automation; where a site checks more than the request
-  shows, the answer is the real Chrome road.
+- **Not a fingerprint patch:** an identity is the HTTP presentation an ordinary browser sends. Where a
+  site checks more than the request shows, the answer is the real browser road, which presents itself as
+  that browser does (「Which browser」).
 
 ### Redirects and responses
 
@@ -92,7 +95,7 @@
   slot comes. No request is turned away for the wait in front of it.
 - **`429` and `Retry-After`:**
   - When a page answers with them, that host's global time is pushed back.
-  - The read waits until that time and then asks Chrome, where its strategy lets it; the site's own span
+  - The read waits until that time and then asks the real browser, where its strategy lets it; the site's own span
     is followed, never cut short and never copied into a bound of this layer's.
 
 ### Settings from the session record
@@ -119,28 +122,28 @@
 ### A read its caller lets go of
 
 - **A read waits for its answer.** No request of the web layer has a timeout of its own: a page, a search
-  engine, a picture, a page's head, a name's lookup, Chrome's load of a page and the PDF reader each end with
+  engine, a picture, a page's head, a name's lookup, the browser's load of a page and the PDF reader each end with
   their answer, a refused or broken connection, or the other end gone. The connection's TCP keep-alive is what
   tells a peer that has gone away.
 - **Its caller lets go of it by going away.** A call of a placed tool asks the record's web helper on a
   connection of its own and holds it open until it is answered. When the call ends — it answered, the tool host
   ended it, or its caller went away — that connection closes, and the helper drops the read with everything
-  under way for it: the request, its wait in a pacing queue or for a Chrome place, Chrome's navigation, the PDF
+  under way for it: the request, its wait in a pacing queue or for a browser place, the browser's navigation, the PDF
   reader, a branch request. A harness that cancels a call of the MCP server drops that call's read the same way.
 - **A site that takes the connection and never answers holds the read until its caller lets go of it.** Nothing
   here ends such a read on time.
 
-## Direct collection and real Chrome
+## Direct collection and the real browser
 
 ### Strategies
 
 - **`direct-then-browser` (default):** read with the direct client first.
-- **`browser-first`:** read with real Chrome from the start.
-- **`direct-only`:** never use Chrome, and return blocks as they are.
+- **`browser-first`:** read with the real browser from the start.
+- **`direct-only`:** never use the browser, and return blocks as they are.
 - **A fallback opens the address that was asked for,** not the one the direct client's redirects
-  ended on, and Chrome follows the redirects itself: a site that sent the direct client to its login
+  ended on, and the browser follows the redirects itself: a site that sent the direct client to its login
   page may serve a browser the page itself.
-- **A failure the fallback meets says so:** the error carries the mark that Chrome failed the page
+- **A failure the fallback meets says so:** the error carries the mark that the browser failed the page
   after the direct read had, so its caller knows both roads were tried.
 
 ### How a fetched page is classified
@@ -199,47 +202,100 @@
   - A PDF the reader cannot open, a cut one among them, is an error naming the reader's complaint.
     `pdftotext` runs as its own process and is waited for until it ends; a read its caller lets go of ends
     the process with it.
-- **Only the direct client reads a PDF.** Chrome shows a PDF in its viewer, whose page holds no
-  text. Under `browser-first`, a page Chrome reports as a PDF is read again by the direct client; a
-  PDF served to Chrome alone, after the direct client was refused, is a block.
+- **Only the direct client reads a PDF.** A browser shows a PDF in its viewer, whose page is the
+  viewer's and not the document's. Under `browser-first`, a page the browser reports as a PDF is read
+  again by the direct client; a PDF served to the browser alone, after the direct client was refused, is
+  a block.
 
-### How Chrome is started
+### Which browser
 
-- **Binary and profile:** the web layer runs `/usr/bin/google-chrome` stable non-headless, with a fresh
-  temporary `--user-data-dir` and a loopback DevTools endpoint. The arguments it adds for a detached
-  session and the session variables it clears are built in beside the code that starts it.
-- **Its own screen:** a dedicated virtual X server (Xvfb) the web layer starts for this Chrome.
+- **The owner's own Firefox profile, where this machine has one.** The owner ordered on 2026-11-17 that the
+  web tools' browser use the profile he uses himself, with his cookies and sign-ins, so a site sees an
+  ordinary signed-in person rather than a fresh browser it takes for a bot. So where Firefox and its
+  default profile stand on the machine, every browser read runs Firefox on a copy of that profile.
+  - Firefox is `/snap/bin/firefox` and its profiles' folder `snap/firefox/common/.mozilla/firefox` under the
+    home folder; `BMO_FIREFOX_PATH` and `BMO_FIREFOX_PROFILES` name others, and an empty
+    `BMO_FIREFOX_PROFILES` names none. The profile is the one the folder's `profiles.ini` makes Firefox open
+    by default.
+- **Chrome on a fresh temporary profile everywhere else:** a machine with no such Firefox profile, another
+  node among them, reads with standard Chrome on a profile made for it and deleted after it.
+- **The owner's profile is only ever read.** It is copied file by file into a new folder at each start, and
+  the browser runs on the copy, never on the profile itself. Nothing is written into the profile, no lock of
+  it is taken, and its own Firefox open or closed makes no difference:
+  - Firefox opens a profile in one process at a time; a copy lets several browser places and the owner's own
+    Firefox run side by side.
+  - A browser ended without warning leaves nothing changed behind in his profile, since no setting of a
+    start is ever written there.
+  - Where his Firefox is writing a database as it is copied, the copy takes the database and its journal as
+    they stand, which SQLite reads as the last whole state; a sign-in made that very moment may be missed.
+- **What the copy leaves out:** saved passwords and their key store, the Firefox account Sync signs in
+  with, the browsing history and bookmarks, form history, the saved session, the lock files, his own
+  `user.js`, and crash and telemetry reports. Cookies, site storage, permissions, certificates, extensions
+  and his preferences are copied.
+- **The copy dies with the browser.** Cookies a site renews in that browser stay in the copy and are
+  deleted with it, so a site that replaces a sign-in token on every use may sign the owner out of his own
+  Firefox; nothing gathered in the copy ever reaches his profile.
+
+### How the browser is started
+
+- **Firefox on the owner's profile copy:** started non-headless with `--no-remote`, so it neither hands
+  itself to a Firefox he opens nor takes one over, and with a loopback WebDriver BiDi endpoint on a port it
+  chooses and announces.
+  - The copy is made in a new folder named `.bmo-web-firefox-` and a random suffix inside the profiles'
+    folder, readable by a snap's Firefox, made by this process alone and holding the starting process's id.
+  - Its `user.js` is this start's own: the network path below, its cache and every download kept inside the
+    copy so they are deleted with it and nothing lands in the owner's own download folder, no restore of a
+    session, no default-browser check, and its window behaving as focused, as a person's window does.
+  - An address that turns into a download fails the read, saying so: a browser shows no page for it.
+  - A snap's Firefox is started in a user scope of the snap's own name made through the user's service
+    manager, since its launcher would otherwise ask the session bus for one; the bus is cut only inside it.
+  - Firefox's remote agent is told not to lay its recommended automation preferences over the profile's,
+    so the copy behaves as the owner's own Firefox does.
+  - **`navigator.webdriver` is hidden:** a script run in every page before the page's own scripts makes
+    it answer false, as a person's browser answers. The owner's complaint was bot blocking, and a browser
+    that announces automation defeats his order of 2026-11-17; the same holds for the browser that tops up
+    his DeepSeek balance on the same profile.
+- **Chrome on a temporary profile:** `/usr/bin/google-chrome` (`BMO_CHROME_PATH`) stable non-headless,
+  with a fresh temporary `--user-data-dir` and a loopback DevTools endpoint. The arguments it adds for a
+  detached session and the session variables it clears are built in beside the code that starts it. It
+  adds no stealth option: nothing alters its `navigator.webdriver` or client hints.
+- **Its own screen:** a dedicated virtual X server (Xvfb) the web layer starts for this browser.
   - Xvfb picks a free display number itself and reports it, so it never collides with another X server.
-  - It accepts connections only with a random cookie kept inside the temporary profile, and does not
-    listen on TCP.
-- **Kept off the person's desktop:** Chrome opens no window in the person's desktop session, and
+  - It accepts connections only with a random cookie kept inside the browser's profile folder, and does
+    not listen on TCP.
+- **Kept off the person's desktop:** the browser opens no window in the person's desktop session, and
   touches neither that session's D-Bus nor its keyring.
   - The user session's `DISPLAY`, `WAYLAND_DISPLAY`, `XAUTHORITY`, `XDG_RUNTIME_DIR` and
     `DBUS_SESSION_BUS_ADDRESS` are removed from the environment.
-  - The runtime directory is put inside the profile, and the session bus is off.
-  - Chrome starts with `--password-store=basic` and the X11 platform.
-  - So a new profile never raises an authentication dialog on the person's screen while trying to
-    open a password store.
+  - The runtime directory is put inside the profile folder, and the session bus is off or leads nowhere.
+  - Chrome starts with `--password-store=basic` and the X11 platform; Firefox with Wayland turned off and
+    no crash reporter.
+  - So a browser never raises an authentication dialog on the person's screen while trying to open a
+    password store.
 - **What it never does:**
-  - open a person's own Chrome profile
-  - add stealth options that alter `navigator.webdriver` or client hints
-  - pretend to be an account
+  - start a browser on the owner's profile itself, or write anything into it
+  - open a Chrome profile of a person's
+  - sign in to anything, or pretend to be an account the profile is not signed in to
   - solve a CAPTCHA, or pass one to a solving service
 
-### Chrome's network path
+### The browser's network path
 
-- **No resolving of its own:** Chrome never resolves names to connect by itself.
-- **Through a proxy:** every request goes through a proxy the web layer starts on loopback for that Chrome.
+- **No resolving of its own:** the browser never resolves names to connect by itself.
+- **Through a proxy:** every request goes through a proxy the web layer starts on loopback for that browser.
   - The proxy resolves the name.
   - It refuses private, loopback, link-local and metadata addresses.
   - It connects only to the address just checked.
-- **https** passes the proxy as a tunnel, so TLS and certificate checks stay between Chrome and the site.
+- **https** passes the proxy as a tunnel, so TLS and certificate checks stay between the browser and the
+  site.
 - **Plain http** ends with one connection per request, so one connection never continues to another
   name.
 - **Loopback is not exempt:** loopback addresses are also removed from the proxy bypass list and get the
   same check.
 - **No WebRTC UDP,** which would not go through the proxy.
-- **Every request a page makes is checked as its address is,** before Chrome sends it.
+- **Firefox is told the same through its copy's `user.js`:** the proxy for http and https, no host it
+  bypasses and loopback sent through it as well, no failing over to a direct connection, no DNS over HTTPS,
+  no name prefetching or speculative connection, and WebRTC through the proxy only.
+- **Every request a page makes is checked as its address is,** before the browser sends it.
   - A refused address fails the whole read, wherever on the page it stands: the page asked for a
     place this machine never goes.
   - A name with no address fails only its own request, as it does in any browser, unless it is the
@@ -250,23 +306,24 @@
 
 - **One context per session:** within the same session record the browser context is kept while it
   is used, preserving cookies.
-- **A few Chromes on the machine at once.** A Chrome takes one of the machine's browser places before it
-  starts and gives it back as it ends; there are three, and `BMO_CHROME_PLACES` sets another number. A
+- **A few browsers on the machine at once.** A browser takes one of the machine's browser places before
+  it starts and gives it back as it ends; there are three, and `BMO_CHROME_PLACES` sets another number. A
   place is a lock in the temporary directory, let go with the process holding it however that process
   ends. A start that finds every place taken waits for one to be given back, however long that takes, and
   is never turned away for having waited; a place whose lock file cannot be opened at all fails the start
   as unavailable.
 - **A start waits for what it started.** Its private display is waited for until the display names its
-  number or ends, and Chrome until its DevTools endpoint answers or Chrome exits. On a loaded machine a
-  fresh display and Chrome can stand silent for seconds before they answer, where an idle machine answers
-  in about half a second.
-- **An idle Chrome ends.** A Chrome no read has used or waited for in three minutes is ended as at the end
-  below and gives its place back; the next page in that session starts a fresh one, with fresh cookies. A
-  record stands as long as its session — a resident program's for as long as the program stands — and a
-  session that read one page an hour ago would otherwise keep a place, and a browser's memory, for
-  hours. It is the release of a browser nothing is using; a read under way or waiting is never ended by it.
+  number or ends, Chrome until its DevTools endpoint answers or Chrome exits, and Firefox until it
+  announces its WebDriver BiDi endpoint or ends. On a loaded machine a fresh display and browser can stand
+  silent for seconds before they answer, where an idle machine answers in about half a second.
+- **An idle browser ends.** A browser no read has used or waited for in three minutes is ended as at the
+  end below and gives its place back; the next page in that session starts a fresh one, with fresh cookies
+  (on Firefox, a fresh copy of the owner's profile). A record stands as long as its session — a resident
+  program's for as long as the program stands — and a session that read one page an hour ago would
+  otherwise keep a place, and a browser's memory, for hours. It is the release of a browser nothing is
+  using; a read under way or waiting is never ended by it.
 - **A browser of its own, where a page asks for one:** a page opened through the render road may be
-  asked for in a Chrome started for that page alone and ended as soon as it is read, under the same
+  asked for in a browser started for that page alone and ended as soon as it is read, under the same
   guard, pacing and cleanup. It is for a site that puts a check in front of the second page one browser
   process opens, which no clearing of cookies, cache or storage inside that browser lifts; the
   consumer that knows its site asks for it, and this layer names no site.
@@ -276,34 +333,49 @@
   an address of its own or in the page's place under the page's own address — or the document there
   is still loading, the browser keeps watching until the test passes or the page has come to rest, then
   reads the page it came to as any page is read.
-  - The page has come to rest when the document standing in it has loaded, Chrome has given its own
-    network-idle mark for that document, and no navigation is scheduled. A check that moves on by
-    itself loads another document or asks the network as it works, and either keeps the watch going.
+  - The page has come to rest when the document standing in it has loaded and the network has gone
+    quiet for it. Chrome says so by its own network-idle mark for that document with no navigation
+    scheduled; Firefox gives no such mark, so the page has come to rest there once its last load has
+    fired, no request of the page is under way, and none has begun or ended for half a second. A check
+    that moves on by itself loads another document or asks the network as it works, and either keeps the
+    watch going.
   - Nothing is clicked or solved: a check that waits for a person comes to rest and is read as it stands.
     So is a check that waits on a timer of its own with nothing on the network; one that holds the network
     open without moving on is watched until its caller lets go of the read.
   - The consumer that knows its site names the test, and this layer names no site; a site tool names it
     as data the web helper makes the test of (docs/site-contract.md, 「What a tool is given」).
 - **At the end:**
-  - Chrome is asked to close, sent `SIGTERM`, and waited for until it has ended.
-  - That Chrome's Xvfb is sent `SIGTERM` and waited for until it has ended.
-  - The temporary profile and the config and cache under it are deleted.
-- **A navigation waits for the page's load event,** or for Chrome or its DevTools connection to end.
+  - The browser is asked to close, sent `SIGTERM`, and waited for until it has ended; whatever is left of
+    Firefox's process group is then killed.
+  - That browser's Xvfb is sent `SIGTERM` and waited for until it has ended.
+  - The browser's profile folder — Chrome's temporary profile, or Firefox's copy of the owner's profile —
+    and everything under it are deleted. The owner's profile itself is never deleted, emptied or written
+    to: a removal refuses any folder that is not one of this layer's own by its name, or that is the owner's
+    profile, stands inside it or holds it.
+- **A navigation waits for the page's load event,** or for the browser or its connection to end.
+  - A navigation the site replaces before its page has loaded — a redirect of its own, or a script check
+    that moves on to the next address while the first page is still loading — is waited on through the
+    one that took its place. Only a navigation that fails before its document has arrived fails the read.
 - **The page is read once it holds still:** two snapshots taken 150 ms apart that agree, or the snapshot
   standing two seconds after the load. A page that keeps changing its own text — a clock, a ticker — never
   agrees with itself, and the two seconds say when its snapshot is taken; they never fail the read. A
   snapshot has a size limit.
 - **One navigation at a time** in the same context, so concurrent fallbacks never overwrite each other's
   page, status or cookie observations.
-- **If the process that started Chrome dies suddenly** — the web helper, or the tool host for a
-  site tool's Chrome — Chrome ends with it through the kernel parent-death signal, and Xvfb through
+- **If the process that started the browser dies suddenly** — the web helper, or the tool host for a
+  site tool's browser — Chrome ends with it through the kernel parent-death signal, and Xvfb through
   the same signal; a helper ends with the tool host the same way.
-- **Leftover profiles** are reclaimed by the next start, after it confirms the owner is not alive.
+  - A snap's Firefox is started through the snap's privileged launcher, which drops that signal. So a
+    small watcher process stands beside each Firefox, in a process group of its own, holding the reading
+    end of a pipe only the starting process writes to; when that process is gone the pipe closes, and the
+    watcher kills Firefox's process group.
+- **Leftover profiles** are reclaimed by the next start, after it confirms the owner is not alive:
+  Chrome's in the temporary directory, Firefox's copies in the profiles' folder.
 
 ### How a leftover profile is reclaimed
 
 1. **Stop every process that points at the profile path** by argument or environment variable:
-   - the browser opened with `--user-data-dir`
+   - the browser opened with `--user-data-dir` or `--profile`
    - helpers given a directory under the profile as an argument
    - Xvfb given the cookie inside the profile as an argument
    - the GPU process using a shader cache through `XDG_CACHE_HOME`
@@ -312,18 +384,20 @@
 4. **If that cannot be confirmed within the limit,** do not delete it; leave it to the next start's
    reclaim.
 
-- A Chrome helper that is shutting down must not recreate the deleted profile and leave it behind,
+- A browser helper that is shutting down must not recreate the deleted profile and leave it behind,
   which is what the second look is for.
+- Only a folder whose name carries this layer's own prefix is ever looked at, and the owner's profile is
+  refused by the same check as at the end above.
 
-### What Chrome returns
+### What the browser returns
 
-- **Ordinary content:** when Chrome produces the ordinary body behind JavaScript, it is returned in the
-  same character-slicing format, with the final URL, content type and `browser` provenance.
-- **Still blocked:** if an HTTP refusal or a challenge/CAPTCHA remains in Chrome too, `blocked` is
+- **Ordinary content:** when the browser produces the ordinary body behind JavaScript, it is returned in
+  the same character-slicing format, with the final URL, content type and `browser` provenance.
+- **Still blocked:** if an HTTP refusal or a challenge/CAPTCHA remains in the browser too, `blocked` is
   returned.
 - **No claims of bypassing:** a real browser having seen a challenge is not success, and nothing is
   recorded as having "bypassed" or "cleared" any protection.
-- **Chrome failures:** if Chrome cannot be started, that is left as a failure as it is.
+- **Browser failures:** if the browser cannot be started, that is left as a failure as it is.
 
 ## Search engines
 

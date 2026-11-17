@@ -1,5 +1,5 @@
 //! One record's web reading (docs/web-access.md, 「One session, one investigation」): its page budget and
-//! the search refusals it has met, its session — the direct client's jar, the pacing, the real Chrome it falls
+//! the search refusals it has met, its session — the direct client's jar, the pacing, the real browser it falls
 //! back to — and the research branches it asks for. A record holds one, in its web helper, which opens it as
 //! it starts and closes it as it ends.
 

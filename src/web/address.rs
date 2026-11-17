@@ -134,7 +134,7 @@ pub fn web_url(value: &str) -> WebResult<Url> {
 
 impl Check {
   /// The check a browser request passes, answering with the address it passed at.
-  pub fn guard(&self) -> crate::web::chrome::UrlGuard {
+  pub fn guard(&self) -> crate::web::browser::UrlGuard {
     let check = self.clone();
 
     Arc::new(move |url: String| {

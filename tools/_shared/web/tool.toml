@@ -1,5 +1,5 @@
 # The web helper: one record's web reading — its page budget and search refusals, and its web session with the
-# standard Chrome a fetch falls back to — which the web's core tools and every site tool ask on its socket
+# real browser a fetch falls back to — which the web's core tools and every site tool ask on its socket
 # (docs/site-contract.md, 「The web helper's socket」).
 
 [tool]
@@ -11,4 +11,4 @@ check = 'cargo test --test main web_helper::'
 run = ["web-helper"]
 
 [helper]
-description = "One record's web reading: its page budget and search refusals, and its web session and Chrome."
+description = "One record's web reading: its page budget and search refusals, and its web session and real browser."

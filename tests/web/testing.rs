@@ -12,7 +12,7 @@ use futures_util::StreamExt;
 use http::{HeaderMap, HeaderValue};
 
 use bmo_explorer::web::address::{Check, Lookup};
-use bmo_explorer::web::chrome::{BrowserDocument, BrowserFetcher, FetchOptions};
+use bmo_explorer::web::browser::{BrowserDocument, BrowserFetcher, FetchOptions};
 use bmo_explorer::web::client::{Incoming, Outgoing, Transport};
 use bmo_explorer::web::clock::StandingClock;
 use bmo_explorer::web::error::WebResult;

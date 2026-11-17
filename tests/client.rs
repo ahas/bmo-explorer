@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use base64::Engine;
 use bmo_explorer::client::{Explorer, ImageSearchInput, RasterInput, WebSearchInput};
-use bmo_explorer::web::chrome::{BrowserDocument, BrowserFetcher};
+use bmo_explorer::web::browser::{BrowserDocument, BrowserFetcher};
 use bmo_explorer::web::clock::StandingClock;
 use bmo_explorer::web::pacing::MemoryPacing;
 use bmo_explorer::web::session::{SessionParts, WebSession};

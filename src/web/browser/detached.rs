@@ -1,4 +1,4 @@
-//! How every Chrome the web layer starts stands apart from a person's session (docs/web-access.md, 「How Chrome
+//! How every Chrome the web layer starts stands apart from a person's session (docs/web-access.md, 「How the browser
 //! is started」), as `detached.toml` beside this module holds it.
 
 use std::sync::LazyLock;

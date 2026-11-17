@@ -1,4 +1,4 @@
-use bmo_explorer::web::chrome::*;
+use bmo_explorer::web::browser::*;
 use bmo_explorer::web::clock::{Clock, StandingClock};
 use bmo_explorer::web::error::Failure;
 use bmo_explorer::web::error::WebError;

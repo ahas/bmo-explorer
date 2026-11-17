@@ -98,7 +98,7 @@
     post a body to it with headers of its own, for an endpoint the site's own page posts to, or ask
     for it with headers of its own and no body, for a site that answers a browser's request
     otherwise than another client's;
-  - `rendered` — one page opened in the real Chrome and read after its script has run, for a site
+  - `rendered` — one page opened in the real browser and read after its script has run, for a site
     that serves the page only to a real browser; a tool may ask for it in a browser of its own,
     started for that page and ended after it, where its site checks the second page one browser
     opens, and may name when the page it came for has arrived, so the page is read only once the
@@ -108,7 +108,7 @@
       arrived only at an address carrying one of given query pairs;
   - `engine` — the search engines, for a site that refuses this machine's readers outright;
   - `document` — one page read and sliced the way `web_fetch` reads it, its PDF reading and its
-    Chrome fallback included, for a tool whose site wraps another site's page or serves its sheets
+    browser fallback included, for a tool whose site wraps another site's page or serves its sheets
     as PDFs; a tool may ask for a PDF's layout reading, which keeps a table's rows apart
     (docs/web-access.md, 「A PDF」);
   - `head` — what a server answers about one address asked for without its body: its status, the
@@ -156,8 +156,8 @@
 - **A road's result** is `{"Ok": …}` with what the road gave, or `{"Err": …}` with the failure it met:
   `message`, the sentence; `kind`, one of `blocked`, `unsafe_address`, `too_large`,
   `transport`, `http` and `browser_unavailable`; `status?`; `url?`; and `chrome_fallback`, true where the
-  real Chrome, opened after the direct read failed, failed the page too. A helper out of reach fails the
-  road as `browser_unavailable`, a program this machine needs that could not be had.
+  real browser, Chrome or Firefox alike, opened after the direct read failed, failed the page too. A helper
+  out of reach fails the road as `browser_unavailable`, a program this machine needs that could not be had.
 - **A tool result** is the tool host's: `content`, `isError` and `structuredContent` where there is one.
 
 ## A page a tool claims

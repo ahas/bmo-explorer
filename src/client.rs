@@ -1,5 +1,5 @@
 //! The client (docs/api.md, 「The client」): the six operations this repository serves, each done once here and
-//! answered in the common wire format. It holds one web reading — its direct client, the real Chrome it falls
+//! answered in the common wire format. It holds one web reading — its direct client, the real browser it falls
 //! back to and their cookie stores — from the moment it is opened until it is closed, on the store's pacing,
 //! so its requests and every other process's are paced together.
 
@@ -430,7 +430,7 @@ impl Explorer {
     })
   }
 
-  /// One page read as words: the direct client first, the real Chrome after a block, a PDF as its text.
+  /// One page read as words: the direct client first, the real browser after a block, a PDF as its text.
   pub async fn web_fetch(&self, url: &str) -> Result<PageText, ClientError> {
     let read = self
       .session

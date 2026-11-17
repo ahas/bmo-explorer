@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::testing::{Web, answer, check, fixture, html};
-use bmo_explorer::web::chrome::BrowserDocument;
+use bmo_explorer::web::browser::BrowserDocument;
 use bmo_explorer::web::clock::{Clock, StandingClock};
 use bmo_explorer::web::pacing::{MemoryPacing, Pacing, Route as RecipeRoute};
 use bmo_explorer::web::search::engine::*;

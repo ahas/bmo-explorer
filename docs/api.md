@@ -33,7 +33,9 @@ flowchart TD
   keeps its own folder in it, `explorer/`, and reads no other (docs/store.md).
 - **It reads no settings file.** What the web layer is built with stands beside the code that reads it: the
   engine roster with each engine's category and the rests after a refusal (docs/web-access.md, 「Rosters」), and
-  the arguments every Chrome it starts carries (docs/web-access.md, 「How Chrome is started」).
+  the arguments every browser it starts carries (docs/web-access.md, 「How the browser is started」).
+- **Outside the data root it reads one thing: the owner's Firefox profile,** where the machine has one, copied
+  for each browser it starts and never written to (docs/web-access.md, 「Which browser」).
 - **Every answer this repository gives is English,** a sentence or a status code.
 
 ## The contract
@@ -49,7 +51,7 @@ flowchart TD
 ## The client
 
 - **The client is this crate's `client` module,** the one place the seven operations are done. It is opened over
-  a data root and holds one web reading, its own direct client, Chrome and cookie stores, until it is closed
+  a data root and holds one web reading, its own direct client, real browser and cookie stores, until it is closed
   (docs/web-access.md, 「One session, one investigation」).
 - **A failure is the wire format's error:**
 
@@ -60,7 +62,7 @@ flowchart TD
 | `not-markup` | `fetchPage` was answered with something other than markup |
 | `too-large` | the answer was more than the operation reads |
 | `upstream-failed` | the site or every engine asked failed: an HTTP error, a block, a refused or broken connection; the sentence says which |
-| `failed` | this machine failed: the store, or a Chrome that could not start |
+| `failed` | this machine failed: the store, or a browser that could not start |
 
 - **No TypeScript package is published:** the contract has no route a package could call, and no browser
   runs any of it.
@@ -93,7 +95,7 @@ flowchart TD
 - **The image engines** are the roster's `openverse`, `wikicommons.images` and `unsplash`; a search naming an
   engine or a category that holds no image engine is refused `bad-request`. Pictures are deduplicated by their
   direct address and mixed one engine at a time, as text hits are.
-- **`explorer_web_fetch` reads by the plain road:** the direct client, then the real Chrome after a block
+- **`explorer_web_fetch` reads by the plain road:** the direct client, then the real browser after a block
   (docs/web-access.md, 「Strategies」); a PDF comes back as its text. A site tool's own reading of a page it
   claims is a tool host's (docs/site-contract.md, 「A page a tool claims」), and the MCP server has none.
 - **`explorer_link_preview` and `explorer_fetch_page` read the page directly,** checking the address and each

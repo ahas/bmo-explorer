@@ -1,4 +1,4 @@
-# How every Chrome the web layer starts stands apart from a person's session (docs/web-access.md, 「How Chrome is
+# How every Chrome the web layer starts stands apart from a person's session (docs/web-access.md, 「How the browser is
 # started」).
 
 # The arguments it always carries, so nothing of the machine's own session is asked for: passwords stay in

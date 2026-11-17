@@ -1,5 +1,5 @@
 //! One investigation's web reading (docs/web-access.md, 「One session, one investigation」): the direct
-//! client's cookie jar, the pacing every request takes, and the real Chrome a page falls back to, kept for
+//! client's cookie jar, the pacing every request takes, and the real browser a page falls back to, kept for
 //! the session and ended with it. A page comes back sliced, with where the rest starts.
 
 use std::sync::Arc;
@@ -7,7 +7,7 @@ use std::sync::Arc;
 use url::Url;
 
 use crate::web::address::{Check, host_of, web_url};
-use crate::web::chrome::{BrowserDocument, BrowserFetcher, Chrome, FetchOptions, UrlGuard};
+use crate::web::browser::{Browser, BrowserDocument, BrowserFetcher, FetchOptions, UrlGuard};
 use crate::web::classify::{Disposition, Fetched, classify};
 use crate::web::client::{Direct, DirectBytes, Transport, decode};
 use crate::web::error::{Failure, WebError, WebResult};
@@ -52,7 +52,7 @@ pub fn raw_url_for(url: &str) -> String {
   }
 }
 
-// The page as Chrome rendered it, with the links its text does not already name.
+// The page as the browser rendered it, with the links its text does not already name.
 fn browser_text(document: &BrowserDocument) -> String {
   let text = crate::web::classify::tidy(&document.text.replace('\u{a0}', " "));
   let links: Vec<String> = document
@@ -75,9 +75,9 @@ pub struct FetchPage {
   pub offset: Option<usize>,
   pub max_chars: Option<usize>,
   pub raw: bool,
-  /// Whether the real Chrome may read a page the direct client could not.
+  /// Whether the real browser may read a page the direct client could not.
   pub browser_fallback: bool,
-  /// Read the page in standard Chrome without a direct attempt first.
+  /// Read the page in the real browser without a direct attempt first.
   pub browser_first: bool,
   /// Read a PDF in its layout rather than in reading order.
   pub pdf_layout: bool,
@@ -90,7 +90,7 @@ pub struct SessionParts {
   pub check: Check,
   /// The pacing between two requests to one host.
   pub host_interval_ms: u64,
-  /// How the browser a session falls back to is made, under the session's guard; the real Chrome where
+  /// How the browser a session falls back to is made, under the session's guard; the machine's browser where
   /// none is named, a test's stand-in otherwise.
   pub browsers: Option<BrowserFactory>,
 }
@@ -140,7 +140,7 @@ impl WebSession {
   fn own_browser(&self) -> Arc<dyn BrowserFetcher> {
     match &self.parts.browsers {
       Some(make) => make(self.guard()),
-      None => Arc::new(Chrome::new(self.guard())),
+      None => Arc::new(Browser::on_this_machine(self.guard())),
     }
   }
 
@@ -164,7 +164,7 @@ impl WebSession {
     direct
   }
 
-  /// One page as the fetch tool reads it: the direct client first, the real Chrome after a block where
+  /// One page as the fetch tool reads it: the direct client first, the real browser after a block where
   /// that is allowed, a PDF as its text.
   pub async fn fetch_page(&self, url: &str, options: &FetchPage) -> WebResult<FetchSlice> {
     let target = raw_url_for(url);
@@ -267,10 +267,10 @@ impl WebSession {
         .map_err(crate::web::pacing::store_failure)?;
     }
 
-    // A site's own Retry-After is waited out, however long it is, before Chrome asks again.
+    // A site's own Retry-After is waited out, however long it is, before the browser asks again.
     wait_for_host(&*self.parts.store, &page_key, self.parts.host_interval_ms, &**clock).await?;
 
-    // Chrome opens the address that was asked for and follows its redirects itself: a page that sent the
+    // The browser opens the address that was asked for and follows its redirects itself: a page that sent the
     // direct client to its login page may serve a browser the page itself. What it fails with says that
     // both roads were tried.
     Box::pin(self.rendered(&target, options, Some((reason, fetched.status))))
@@ -278,8 +278,8 @@ impl WebSession {
       .map_err(WebError::after_chrome)
   }
 
-  /// A page opened in the real Chrome and handed back as it rendered, unclassified: the road a search
-  /// engine's recipe may send it by. `fresh` opens it in a Chrome of its own, ended once the page is read.
+  /// A page opened in the real browser and handed back as it rendered, unclassified: the road a search
+  /// engine's recipe may send it by. `fresh` opens it in a browser of its own, ended once the page is read.
   pub async fn render(&self, url: &str, fresh: bool, options: FetchOptions) -> WebResult<BrowserDocument> {
     self.parts.check.resolve(&web_url(url)?).await?;
     self.wait_for_page_host(url).await?;
@@ -295,7 +295,7 @@ impl WebSession {
     read
   }
 
-  // The page as standard Chrome renders it: after a classified direct block, or first of all under the
+  // The page as the real browser renders it: after a classified direct block, or first of all under the
   // browser-first strategy, where there is no direct attempt to name.
   async fn rendered(
     &self,
@@ -310,8 +310,8 @@ impl WebSession {
       }
       Err(error) => {
         let (first, status) = match &direct {
-          Some((reason, status)) => (format!("{reason}; standard Chrome fallback failed"), Some(*status)),
-          None => ("Browser-first fetch; standard Chrome failed".to_owned(), None),
+          Some((reason, status)) => (format!("{reason}; real browser fallback failed"), Some(*status)),
+          None => ("Browser-first fetch; the real browser failed".to_owned(), None),
         };
 
         return Err(
@@ -321,13 +321,13 @@ impl WebSession {
       }
     };
 
-    // Chrome shows a PDF in its viewer, whose page holds no text: the file is the direct client's to read,
+    // A browser shows a PDF in its viewer, whose page holds no text: the file is the direct client's to read,
     // unless the direct client was what the site refused.
     if is_pdf(&rendered.content_type, b"") {
       if let Some((reason, status)) = direct {
         return Err(
           WebError::new(
-            format!("{reason}; standard Chrome was served a PDF, whose viewer holds no text"),
+            format!("{reason}; the real browser was served a PDF, whose viewer holds no text"),
             Failure::Blocked,
           )
           .at(Some(status), Some(url)),
@@ -361,7 +361,7 @@ impl WebSession {
       return Err(
         WebError::new(
           format!(
-            "Standard Chrome still reached {what} at {}; no CAPTCHA or challenge was attempted",
+            "The real browser still reached {what} at {}; no CAPTCHA or challenge was attempted",
             rendered.url
           ),
           Failure::Blocked,

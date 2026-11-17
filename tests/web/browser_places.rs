@@ -1,4 +1,4 @@
-use bmo_explorer::web::chrome::places::*;
+use bmo_explorer::web::browser::places::*;
 
 #[tokio::test]
 async fn a_place_is_held_until_given_back_and_a_start_waits_for_one_while_every_one_is_taken() {

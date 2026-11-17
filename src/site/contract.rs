@@ -18,7 +18,7 @@ pub use crate::forms::{
   slice_content,
 };
 
-/// A page as the real Chrome rendered it.
+/// A page as the real browser rendered it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Rendered {
   pub url: String,
@@ -53,7 +53,7 @@ pub struct Slice {
   pub layout: bool,
 }
 
-/// When a page opened in the real Chrome has arrived, for a site whose own browser check moves on to the page by
+/// When a page opened in the real browser has arrived, for a site whose own browser check moves on to the page by
 /// itself: a page stands on the check while its address's path or its title begins as the check's does, and an
 /// untitled page has not arrived where `titled` says so, unless its address carries one of `untitled_at`'s query
 /// pairs. It is data rather than a test, since a placed tool hands it to the record's web helper on its socket.
@@ -106,7 +106,7 @@ pub trait Reach: Send + Sync {
     url: &'a str,
     request: Option<PageRequest>,
   ) -> Pin<Box<dyn Future<Output = WebResult<String>> + Send + 'a>>;
-  /// One page opened in the real Chrome; `fresh` in a browser of its own, `arrival` for a site whose own
+  /// One page opened in the real browser; `fresh` in a browser of its own, `arrival` for a site whose own
   /// browser check moves on to the page by itself.
   fn rendered<'a>(
     &'a self,

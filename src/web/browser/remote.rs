@@ -1,6 +1,8 @@
-//! One DevTools connection to a Chrome's page: commands answered by id, and the events the page sends, over
-//! the WebSocket Chrome serves on loopback. The protocol is JSON messages, read and written with serde. A
-//! command waits for its answer and an event for its coming, each until then or until the connection ends.
+//! One connection to a browser's remote protocol over the WebSocket it serves on loopback: Chrome's DevTools
+//! protocol or Firefox's WebDriver BiDi, which write their messages alike — a command and its answer carrying
+//! one id, an error in place of a result, and an event named by its method with its parameters. The messages
+//! are JSON, read and written with serde. A command waits for its answer and an event for its coming, each
+//! until then or until the connection ends.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -26,7 +28,7 @@ pub struct Sender {
   reading: Arc<AtomicBool>,
 }
 
-// What a waiter for an event is told as the connection ends, a method Chrome never names.
+// What a waiter for an event is told as the connection ends, a method no browser names.
 const ENDED: &str = "";
 
 fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
@@ -34,7 +36,7 @@ fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 }
 
 fn closed() -> WebError {
-  WebError::new("Chrome DevTools connection closed", Failure::Transport)
+  WebError::new("The browser's remote connection closed", Failure::Transport)
 }
 
 impl Sender {
@@ -55,7 +57,7 @@ impl Sender {
 
     if self.out.send(Message::text(message)).is_err() {
       locked(&self.pending).remove(&id);
-      return Err(WebError::new("Chrome DevTools is not connected", Failure::Transport));
+      return Err(WebError::new("The browser's remote connection is not open", Failure::Transport));
     }
 
     // A command whose caller lets go of it takes its place in the waiting list with it.
@@ -119,12 +121,12 @@ impl Drop for Connection {
 }
 
 impl Connection {
-  /// The connection to a page's DevTools address, waited for until it opens or fails. `handle` is told every
+  /// The connection to a browser's remote address, waited for until it opens or fails. `handle` is told every
   /// event before any waiter is, so what it records is there when a waiter reads it.
   pub async fn open(address: &str, handle: EventHandler) -> WebResult<Self> {
     let (socket, _) = tokio_tungstenite::connect_async(address)
       .await
-      .map_err(|_| WebError::new("Chrome DevTools connection failed", Failure::BrowserUnavailable))?;
+      .map_err(|_| WebError::new("The browser's remote connection failed", Failure::BrowserUnavailable))?;
     let (mut write, mut read) = socket.split();
     let (out, mut outgoing) = mpsc::unbounded_channel::<Message>();
     let pending: Pending = Arc::new(Mutex::new(HashMap::new()));
@@ -156,9 +158,7 @@ impl Connection {
         if let Some(id) = reply.get("id").and_then(Value::as_u64) {
           if let Some(answer) = locked(&pending).remove(&id) {
             let result = match reply.get("error") {
-              Some(error) => {
-                Err(error["message"].as_str().unwrap_or("Chrome DevTools command failed").to_owned())
-              }
+              Some(error) => Err(failure_of(error, &reply)),
               None => Ok(reply.get("result").cloned().unwrap_or(Value::Null)),
             };
             let _ = answer.send(result);
@@ -194,13 +194,33 @@ impl Connection {
   }
 }
 
+/// What a failed command's answer says: DevTools writes its message inside the error, WebDriver BiDi writes the
+/// error's name in its place and the message beside it.
+fn failure_of(error: &Value, reply: &Value) -> String {
+  error["message"]
+    .as_str()
+    .or_else(|| reply["message"].as_str())
+    .or_else(|| error.as_str())
+    .unwrap_or("The browser's remote command failed")
+    .to_owned()
+}
+
 /// Waits for an event of one method, from a subscription taken before the command that causes it, until it
 /// comes or the connection ends.
 pub async fn event(events: &mut broadcast::Receiver<(String, Value)>, method: &str) -> WebResult<Value> {
+  event_where(events, |name, _| name == method).await.map(|(_, params)| params)
+}
+
+/// Waits for the first event `wanted` takes, by its method and parameters, until it comes or the connection
+/// ends.
+pub async fn event_where(
+  events: &mut broadcast::Receiver<(String, Value)>,
+  wanted: impl Fn(&str, &Value) -> bool,
+) -> WebResult<(String, Value)> {
   loop {
     match events.recv().await {
-      Ok((name, params)) if name == method => return Ok(params),
       Ok((name, _)) if name == ENDED => return Err(closed()),
+      Ok((name, params)) if wanted(&name, &params) => return Ok((name, params)),
       Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {}
       Err(broadcast::error::RecvError::Closed) => return Err(closed()),
     }

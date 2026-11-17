@@ -1,4 +1,4 @@
-use bmo_explorer::web::chrome::display::*;
+use bmo_explorer::web::browser::display::*;
 use std::path::Path;
 
 // Carried from packages/web/private-display.test.ts: a detached environment keeps the caller's own variables and none of a person's session
