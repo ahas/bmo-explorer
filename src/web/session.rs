@@ -7,7 +7,7 @@ use std::sync::Arc;
 use url::Url;
 
 use crate::web::address::{Check, host_of, web_url};
-use crate::web::browser::{BrowserDocument, BrowserFetcher, FetchOptions, Pace, UrlGuard};
+use crate::web::browser::{BrowserDocument, BrowserFetcher, ChallengeMark, FetchOptions, Pace, UrlGuard};
 use crate::web::classify::{Disposition, Fetched, classify};
 use crate::web::client::{Direct, DirectBytes, Transport, decode};
 use crate::web::clock::Clock;
@@ -113,6 +113,24 @@ pub struct SessionParts {
 /// What makes a browser under a guard.
 pub type BrowserFactory = Arc<dyn Fn(UrlGuard) -> Arc<dyn BrowserFetcher> + Send + Sync>;
 
+/// The forcing read's answer: the page as `web_fetch` reads it, and what the read's one attempt at a met
+/// challenge came to (docs/web-access.md, 「When the browser meets a challenge」).
+pub struct CaptchaRead {
+  pub slice: FetchSlice,
+  pub challenge: ChallengeMark,
+}
+
+impl CaptchaRead {
+  /// The line the `web_captcha` tool heads its answer with.
+  pub fn line(&self) -> &'static str {
+    match self.challenge {
+      ChallengeMark::Cleared => "CHALLENGE CLEARED",
+      ChallengeMark::Remains => "CHALLENGE REMAINS",
+      ChallengeMark::NotAttempted => "NO CHALLENGE",
+    }
+  }
+}
+
 pub struct WebSession {
   parts: SessionParts,
   jar: tokio::sync::Mutex<Jar>,
@@ -193,7 +211,7 @@ impl WebSession {
       self.parts.check.resolve(&web_url(&target)?).await?;
       self.wait_for_page_host(&target).await?;
 
-      return Box::pin(self.rendered(&target, options, None)).await;
+      return Box::pin(self.rendered(&target, options, None)).await.map(|(slice, _)| slice);
     }
 
     let fetched = self.direct().bytes(&target).await?;
@@ -293,6 +311,7 @@ impl WebSession {
     // both roads were tried.
     Box::pin(self.rendered(&target, options, Some((reason, fetched.status))))
       .await
+      .map(|(slice, _)| slice)
       .map_err(WebError::after_chrome)
   }
 
@@ -313,15 +332,36 @@ impl WebSession {
     read
   }
 
+  /// The forcing read of `web_captcha`: the browser road from the start, no direct attempt first, a challenge
+  /// met in the page attempted once (docs/web-access.md, 「When the browser meets a challenge」), and the
+  /// attempt's outcome carried back beside the page.
+  pub async fn captcha(&self, url: &str, options: &FetchPage) -> WebResult<CaptchaRead> {
+    let target = raw_url_for(url);
+
+    self.parts.check.resolve(&web_url(&target)?).await?;
+    self.wait_for_page_host(&target).await?;
+
+    let (slice, challenge) = Box::pin(self.rendered(&target, options, None)).await?;
+
+    Ok(CaptchaRead { slice, challenge })
+  }
+
   // The page as the real browser renders it: after a classified direct block, or first of all under the
-  // browser-first strategy, where there is no direct attempt to name.
+  // browser-first strategy, where there is no direct attempt to name. The fetch road's browser reads ask for
+  // the one attempt at a met challenge (docs/web-access.md, 「When the browser meets a challenge」) and carry
+  // its mark back.
   async fn rendered(
     &self,
     url: &str,
     options: &FetchPage,
     direct: Option<(String, u16)>,
-  ) -> WebResult<FetchSlice> {
-    let rendered = match self.browser().await.fetch(url.to_owned(), FetchOptions::default()).await {
+  ) -> WebResult<(FetchSlice, ChallengeMark)> {
+    let asking = FetchOptions {
+      solve_challenge: true,
+      pace: Some(self.page_pace()),
+      ..FetchOptions::default()
+    };
+    let rendered = match self.browser().await.fetch(url.to_owned(), asking).await {
       Ok(rendered) => rendered,
       Err(error) if matches!(error.kind, Failure::Blocked | Failure::UnsafeAddress) => {
         return Err(error);
@@ -358,7 +398,9 @@ impl WebSession {
         ..options.clone()
       };
 
-      return Box::pin(self.fetch_page(url, &again)).await;
+      return Box::pin(self.fetch_page(url, &again))
+        .await
+        .map(|slice| (slice, ChallengeMark::NotAttempted));
     }
 
     let classified = classify(&Fetched {
@@ -375,17 +417,24 @@ impl WebSession {
       let what = classified
         .reason
         .unwrap_or_else(|| format!("{:?}", classified.disposition).to_lowercase());
+      // What was done about it, said as it was done: the fetch road's browser read attempts a met challenge
+      // once, and a refusal names whether it did.
+      let said = match rendered.challenge {
+        ChallengeMark::Remains => format!(
+          "The real browser still reached {what} at {}; the challenge was attempted once and did not clear",
+          rendered.url
+        ),
+        ChallengeMark::Cleared => format!(
+          "The real browser cleared its challenge once and then reached {what} at {}",
+          rendered.url
+        ),
+        ChallengeMark::NotAttempted => format!(
+          "The real browser still reached {what} at {}; no CAPTCHA or challenge was attempted",
+          rendered.url
+        ),
+      };
 
-      return Err(
-        WebError::new(
-          format!(
-            "The real browser still reached {what} at {}; no CAPTCHA or challenge was attempted",
-            rendered.url
-          ),
-          Failure::Blocked,
-        )
-        .at(Some(rendered.status), Some(&rendered.url)),
-      );
+      return Err(WebError::new(said, Failure::Blocked).at(Some(rendered.status), Some(&rendered.url)));
     }
 
     let text = if options.raw { rendered.html.clone() } else { browser_text(&rendered) };
@@ -395,7 +444,7 @@ impl WebSession {
       rendered.content_type.clone()
     };
 
-    Ok(
+    Ok((
       slice_content(
         &rendered.url,
         &content_type,
@@ -404,7 +453,8 @@ impl WebSession {
         options.max_chars.unwrap_or(DEFAULT_FETCH_CHARS),
       )
       .read_as(rendered.status, "browser", rendered.truncated),
-    )
+      rendered.challenge,
+    ))
   }
 
   async fn pdf_slice(&self, fetched: &DirectBytes, options: &FetchPage) -> WebResult<FetchSlice> {

@@ -115,9 +115,9 @@
 - **Unavailable search:** two `SEARCH UNAVAILABLE` in a row in one record stop further asking.
 - **The page budget is a hard ceiling:** a record that names `pages` reads that many pages and refuses every
   further one with one line, `BUDGET SPENT`, saying the budget is spent and to write from what is in hand. A page
-  is a `web_fetch` of an address the record has not read yet — reading on in one already read, by its offset,
-  is that same page — and a call of a site tool that reads no engine; a search, a picture and a page's head are
-  no pages. A record that names no budget is never refused on it.
+  is a `web_fetch` or a `web_captcha` of an address the record has not read yet — reading on in one already read,
+  by its offset, is that same page — and a call of a site tool that reads no engine; a search, a picture and a
+  page's head are no pages. A record that names no budget is never refused on it.
 - **The branch allowance:** a record naming its run's `run` and the research unit it reaches by `branchesAt`
   asks that unit for one research branch each `web/research` call; how many branches the run may open and each
   branch's own budget are the research unit's to hold. A branch's own record, `branchOf`, opens none. The
@@ -150,6 +150,8 @@
   page may serve a browser the page itself.
 - **A failure the fallback meets says so:** the error carries the mark that the browser failed the page
   after the direct read had, so its caller knows both roads were tried.
+- **The fetch road's browser reads attempt a challenge met in the page once** (「When the browser meets a
+  challenge」); the search engine's browser remedy and a site tool's `rendered` road do not attempt one.
 
 ### How a fetched page is classified
 
@@ -287,7 +289,9 @@
   - start a browser on the owner's profile itself, or write anything into it
   - open a Chrome profile of a person's
   - sign in to anything, or pretend to be an account the profile is not signed in to
-  - solve a CAPTCHA, or pass one to a solving service
+  - solve a CAPTCHA by reading its pictures, answering its questions or taking its audio road, or pass one
+    to a solving service; the one attempt a fetch road read makes at a challenge is the site's own check
+    handed through and its own box clicked (「When the browser meets a challenge」)
 
 ### The browser's network path
 
@@ -350,9 +354,11 @@
     fired, no request of the page is under way, and none has begun or ended for half a second. A check
     that moves on by itself loads another document or asks the network as it works, and either keeps the
     watch going.
-  - Nothing is clicked or solved: a check that waits for a person comes to rest and is read as it stands.
-    So is a check that waits on a timer of its own with nothing on the network; one that holds the network
-    open without moving on is watched until its caller lets go of the read.
+  - Nothing is clicked or solved on this road: a check that waits for a person comes to rest and is read
+    as it stands. So is a check that waits on a timer of its own with nothing on the network; one that
+    holds the network open without moving on is watched until its caller lets go of the read. The attempt a
+    fetch road read makes (「When the browser meets a challenge」) is not this road: this one waits and
+    never clicks.
   - The consumer that knows its site names the test, and this layer names no site; a site tool names it
     as data the web helper makes the test of (docs/site-contract.md, 「What a tool is given」).
 - **At the end:**
@@ -400,14 +406,44 @@
 - Only a folder whose name carries this layer's own prefix is ever looked at, and the owner's profile is
   refused by the same check as at the end above.
 
+### When the browser meets a challenge
+
+- **Where the attempt stands:** a page read by the fetch road — `web_fetch`, the MCP page read, and the
+  `web_captcha` tool alike — classifies the page the browser came to rest on. Where that reading names the
+  page a challenge (「How a fetched page is classified」), the read attempts the challenge once before it
+  answers. A refusal whose page holds no challenge marks is answered as it stands, and a challenge on the
+  search engine's browser remedy or a site tool's `rendered` road is left as it is: those roads never
+  attempt.
+- **The attempt, in this order, once per read:**
+  - **Hand the check through:** the page as it stands is given its own check to finish, watched at a short
+    interval up to ten seconds. A managed browser check that runs its script and moves on by itself clears
+    here, which is how such a challenge is passed: by letting the site's own check complete.
+  - **Click its own box:** where a challenge widget still stands, the read finds the widget's iframe box as
+    the main document shows it, scrolls it into view, and clicks once where a checkbox challenge puts its
+    box — the left of the widget — through the browser's own input path, as a person's click, so the click
+    is trusted. The page is then given the same ten seconds again.
+  - **Retry the read once:** the address asked for is opened once more and its page read as every browser
+    page is read. This is the read's one retry; a read never attempts twice, and a refusal after it is
+    final for that read.
+- **Never a solver:** the attempt reads no picture CAPTCHA, answers no puzzle or question, takes no audio
+  road, fills no field, and passes nothing to a solving service. A challenge that asks anything of a reader
+  is not solved and never claimed: it stays a block.
+- **What is said either way:** a page that comes through is answered as any browser page, and the
+  `web_captcha` tool heads it with the line `CHALLENGE CLEARED`; a page the browser read with no challenge
+  met is headed `NO CHALLENGE`. A challenge that stands after the one attempt is refused with the block's
+  own words and the statement that the challenge was attempted once and did not clear — never with a claim
+  of having been solved or bypassed.
+
 ### What the browser returns
 
 - **Ordinary content:** when the browser produces the ordinary body behind JavaScript, it is returned in
   the same character-slicing format, with the final URL, content type and `browser` provenance.
 - **Still blocked:** if an HTTP refusal or a challenge/CAPTCHA remains in the browser too, `blocked` is
-  returned.
+  returned. Where the read attempted the challenge (「When the browser meets a challenge」), the refusal
+  says it was attempted once and did not clear.
 - **No claims of bypassing:** a real browser having seen a challenge is not success, and nothing is
-  recorded as having "bypassed" or "cleared" any protection.
+  recorded as having "bypassed" or "cleared" any protection. The line `CHALLENGE CLEARED` says only that
+  the site's own check came to its own end and the retried read answered the page.
 - **Browser failures:** if the browser cannot be started, that is left as a failure as it is.
 
 ## Search engines

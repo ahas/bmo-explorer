@@ -3,5 +3,6 @@
 
 mod explorer;
 mod research;
+mod web_captcha;
 mod web_fetch;
 mod web_search;

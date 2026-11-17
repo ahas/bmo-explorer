@@ -3,5 +3,6 @@
 
 pub mod explorer;
 pub mod research;
+pub mod web_captcha;
 pub mod web_fetch;
 pub mod web_search;

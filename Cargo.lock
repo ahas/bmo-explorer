@@ -3951,6 +3951,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "web-captcha-tool"
+version = "0.1.0-rev.5"
+dependencies = [
+ "bmo-explorer",
+ "tokio",
+]
+
+[[package]]
 name = "web-fetch-tool"
 version = "0.1.0-rev.5"
 dependencies = [

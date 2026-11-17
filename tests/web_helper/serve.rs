@@ -238,6 +238,198 @@ fn what_a_tool_asks_reads_as_the_helper_reads_it() {
     serde_json::json!({ "kind": "search", "query": "q", "count": 10, "category": "news" })
   );
   assert_eq!(serde_json::from_value::<WebAsked>(written).unwrap(), asked);
+
+  let forcing = WebAsked::Captcha {
+    url: "https://gate.example/asked".into(),
+    offset: Some(40),
+    max_chars: None,
+  };
+  let written = serde_json::to_value(&forcing).unwrap();
+
+  assert_eq!(written["kind"], "captcha");
+  assert_eq!(serde_json::from_value::<WebAsked>(written).unwrap(), forcing);
+}
+
+// A record whose browser stands in, for the reads the browser answers.
+fn run_browsers(research: Research, browser: Arc<crate::web::testing::FakeBrowser>) -> Arc<WebRun> {
+  use bmo_explorer::web::browser::BrowserFetcher;
+  use bmo_explorer::web::clock::StandingClock;
+
+  let made: Arc<dyn BrowserFetcher> = browser;
+
+  Arc::new(WebRun::with(
+    research,
+    WebSession::new(SessionParts {
+      store: Arc::new(MemoryPacing::default()),
+      transport: Arc::new(crate::web::testing::Web::default()),
+      check: crate::web::testing::check(StandingClock::at(1_000_000)),
+      host_interval_ms: 0,
+      browsers: Some(Arc::new(move |_| made.clone())),
+    }),
+  ))
+}
+
+fn forcing_page(
+  text: &str,
+  challenge: bmo_explorer::web::browser::ChallengeMark,
+) -> bmo_explorer::web::browser::BrowserDocument {
+  bmo_explorer::web::browser::BrowserDocument {
+    url: "https://fixture.test/post".into(),
+    status: 200,
+    content_type: "text/html".into(),
+    title: "Post".into(),
+    text: text.into(),
+    html: format!("<html><body><p>{text}</p></body></html>"),
+    links: Vec::new(),
+    user_agent: "Chrome".into(),
+    webdriver: false,
+    truncated: false,
+    challenge,
+  }
+}
+
+fn gate_page() -> bmo_explorer::web::browser::BrowserDocument {
+  bmo_explorer::web::browser::BrowserDocument {
+    status: 403,
+    title: "Just a moment...".into(),
+    text: "Verify you are human".into(),
+    html: "<html><head><title>Just a moment...</title></head><body><div class=\"cf-turnstile\"></div></body></html>".into(),
+    ..forcing_page("", bmo_explorer::web::browser::ChallengeMark::Remains)
+  }
+}
+
+// The forcing read: the browser answers the record's web helper, and the answer carries the attempt's line
+// before the page (docs/api.md, 「The captcha read」).
+#[tokio::test]
+async fn a_captcha_request_is_answered_with_the_attempt_line_before_the_page() {
+  use bmo_explorer::web::browser::ChallengeMark;
+
+  let browser = crate::web::testing::FakeBrowser::answering([forcing_page(
+    "the page behind the challenge",
+    ChallengeMark::Cleared,
+  )]);
+  let (_dir, socket) = served(run_browsers(Research::default(), browser.clone())).await;
+  let answer: Answer = ask_line(
+    &socket,
+    &WebAsked::Captcha {
+      url: "https://fixture.test/post".into(),
+      offset: None,
+      max_chars: None,
+    },
+  )
+  .await
+  .unwrap();
+  let said = answer.plain();
+
+  assert!(!answer.is_error);
+  assert!(said.starts_with("CHALLENGE CLEARED\n"), "{said}");
+  assert!(said.contains("the page behind the challenge"));
+  let asked = browser.asked();
+  assert_eq!(asked.len(), 1, "the forcing read reads the page once");
+  assert!(asked[0].solve, "and asks the browser for the attempt");
+}
+
+#[tokio::test]
+async fn a_forcing_read_that_met_nothing_is_headed_as_it_says() {
+  use bmo_explorer::web::browser::ChallengeMark;
+
+  let browser =
+    crate::web::testing::FakeBrowser::answering([forcing_page("plain page", ChallengeMark::NotAttempted)]);
+  let (_dir, socket) = served(run_browsers(Research::default(), browser)).await;
+  let answer: Answer = ask_line(
+    &socket,
+    &WebAsked::Captcha {
+      url: "https://fixture.test/post".into(),
+      offset: None,
+      max_chars: None,
+    },
+  )
+  .await
+  .unwrap();
+
+  assert!(answer.plain().starts_with("NO CHALLENGE\n"), "{}", answer.plain());
+}
+
+// A challenge that stands after the one attempt is the refusal it is: named, said to have been attempted,
+// and final (docs/web-access.md, 「When the browser meets a challenge」).
+#[tokio::test]
+async fn a_captcha_request_whose_challenge_stands_is_refused_once_and_says_it_was_attempted() {
+  let browser = crate::web::testing::FakeBrowser::answering([gate_page()]);
+  let (_dir, socket) = served(run_browsers(Research::default(), browser.clone())).await;
+  let answer: Answer = ask_line(
+    &socket,
+    &WebAsked::Captcha {
+      url: "https://fixture.test/post".into(),
+      offset: None,
+      max_chars: None,
+    },
+  )
+  .await
+  .unwrap();
+
+  assert!(answer.is_error);
+  assert!(answer.plain().contains("attempted once and did not clear"), "{}", answer.plain());
+  assert_eq!(browser.calls(), 1, "the helper does not send the read again");
+}
+
+// The forcing read takes a page of the record's budget like a fetch of that address, and the spent budget
+// refuses it before the browser is opened.
+#[tokio::test]
+async fn the_page_budget_holds_a_captcha_request_as_it_holds_a_fetch() {
+  let browser = crate::web::testing::FakeBrowser::answering([gate_page()]);
+  let spent = run_browsers(
+    Research {
+      pages: Some(1),
+      ..Research::default()
+    },
+    browser.clone(),
+  );
+
+  spent.guard.take_page(Some("https://other.test/"));
+
+  let (_dir, socket) = served(spent).await;
+  let answer: Answer = ask_line(
+    &socket,
+    &WebAsked::Captcha {
+      url: "https://fixture.test/post".into(),
+      offset: None,
+      max_chars: None,
+    },
+  )
+  .await
+  .unwrap();
+
+  assert_eq!(answer.plain(), BUDGET_SPENT);
+  assert_eq!(browser.calls(), 0);
+}
+
+// A record that reads the web directly only is refused the forcing read naming the strategy, as the `rendered`
+// road refuses it.
+#[tokio::test]
+async fn a_captcha_request_of_a_direct_only_record_is_refused_naming_the_strategy() {
+  let browser = crate::web::testing::FakeBrowser::answering([gate_page()]);
+  let (_dir, socket) = served(run_browsers(
+    Research {
+      strategy: Some("direct-only".into()),
+      ..Research::default()
+    },
+    browser.clone(),
+  ))
+  .await;
+  let answer: Answer = ask_line(
+    &socket,
+    &WebAsked::Captcha {
+      url: "https://fixture.test/post".into(),
+      offset: None,
+      max_chars: None,
+    },
+  )
+  .await
+  .unwrap();
+
+  assert!(answer.is_error);
+  assert!(answer.plain().contains("reads the web directly only"), "{}", answer.plain());
+  assert_eq!(browser.calls(), 0);
 }
 
 // The page budget holds a site tool's call and a fetch alike (docs/web-access.md, 「Settings from the session

@@ -144,20 +144,22 @@ impl Reach for WebRun {
   ) -> Pin<Box<dyn Future<Output = WebResult<Rendered>> + Send + 'a>> {
     Box::pin(async move {
       if self.research.direct_only() {
-        let host = Url::parse(url)
-          .ok()
-          .and_then(|url| url.host_str().map(str::to_owned))
-          .unwrap_or_default();
-
-        return Err(WebError::new(
-          format!("{host} is served only to a real browser, and this run reads the web directly only"),
-          Failure::Blocked,
-        ));
+        return Err(crate::web_helper::run::direct_only_refusal(url));
       }
 
       let arrived =
         arrival.map(|arrival| -> Arrived { Arc::new(move |at, title| arrival.arrived(at, title)) });
-      let page = self.session.render(url, fresh, FetchOptions { arrived }).await?;
+      let page = self
+        .session
+        .render(
+          url,
+          fresh,
+          FetchOptions {
+            arrived,
+            ..FetchOptions::default()
+          },
+        )
+        .await?;
 
       Ok(Rendered {
         url: page.url,

@@ -741,6 +741,37 @@ impl Running for FirefoxRunning {
     })
   }
 
+  // One person's click at a point of the view, through the BiDi input domain: a pointer that moves, presses
+  // and releases, so the widget takes it as trusted.
+  fn click<'a>(&'a self, x: f64, y: f64) -> Answer<'a, WebResult<()>> {
+    Box::pin(async move {
+      let (x, y) = super::challenge::click_point(x, y);
+
+      self
+        .connection()
+        .sender
+        .command(
+          "input.performActions",
+          json!({
+            "context": self.launch.context,
+            "actions": [{
+              "type": "pointer",
+              "id": "web-solver",
+              "parameters": { "pointerType": "mouse" },
+              "actions": [
+                { "type": "pointerMove", "x": x, "y": y, "duration": 100 },
+                { "type": "pointerDown", "button": 0, "duration": 10 },
+                { "type": "pause", "duration": 80 },
+                { "type": "pointerUp", "button": 0, "duration": 10 },
+              ],
+            }],
+          }),
+        )
+        .await
+        .map(|_| ())
+    })
+  }
+
   fn watch(&self) -> &PageWatch {
     &self.traffic().page
   }

@@ -3,7 +3,7 @@
 use std::sync::{Arc, Mutex};
 
 use super::testing::{FakeBrowser, Web, answer, check, pdf_of};
-use bmo_explorer::web::browser::{Arrived, Link};
+use bmo_explorer::web::browser::{Arrived, ChallengeMark, Link};
 use bmo_explorer::web::browser::{BrowserDocument, BrowserFetcher, FetchOptions};
 use bmo_explorer::web::clock::{Clock, StandingClock};
 use bmo_explorer::web::error::Failure;
@@ -25,6 +25,7 @@ fn rendered() -> BrowserDocument {
     user_agent: "Chrome".into(),
     webdriver: false,
     truncated: false,
+    challenge: ChallengeMark::NotAttempted,
   }
 }
 
@@ -234,6 +235,89 @@ async fn a_challenge_that_remains_in_chrome_is_reported() {
   assert_eq!((failed.kind, failed.chrome_fallback), (Failure::Blocked, true));
 }
 
+// The fetch road's browser read asks for the one attempt (docs/web-access.md, 「When the browser meets a
+// challenge」): a challenge the attempt cleared is answered as the page behind it.
+#[tokio::test]
+async fn a_challenge_the_attempt_cleared_is_answered_as_the_page_behind_it() {
+  let browser = FakeBrowser::new(BrowserDocument {
+    challenge: ChallengeMark::Cleared,
+    ..rendered()
+  });
+  let reading = session(every("denied", "text/plain", 403), browser.clone(), StandingClock::at(1_000_000));
+  let slice = reading.fetch_page("https://fixture.test/", &fallback()).await.unwrap();
+
+  assert_eq!(slice.provenance, "browser");
+  assert!(slice.text.contains("rendered by JavaScript"));
+  let asked = browser.asked();
+  assert_eq!(asked.len(), 1, "the cleared page is the one read the fallback made");
+  assert!(asked[0].solve, "the fetch road asks for the attempt");
+}
+
+// A challenge that stands after the attempt is refused with what was done said, and the read never goes back.
+#[tokio::test]
+async fn a_challenge_attempted_once_and_still_standing_is_refused_once_and_final() {
+  let browser = FakeBrowser::new(BrowserDocument {
+    status: 403,
+    title: "Just a moment...".into(),
+    text: "Verify you are human".into(),
+    html: "<html><head><title>Just a moment...</title></head><body><div class=\"cf-turnstile\"></div></body></html>".into(),
+    challenge: ChallengeMark::Remains,
+    ..rendered()
+  });
+  let reading = session(every("denied", "text/plain", 403), browser.clone(), StandingClock::at(1_000_000));
+  let failed = reading.fetch_page("https://fixture.test/", &fallback()).await.unwrap_err();
+
+  assert_eq!((failed.kind, failed.chrome_fallback), (Failure::Blocked, true));
+  assert!(
+    failed.message.contains("the challenge was attempted once and did not clear"),
+    "the refusal says what was tried: {failed}"
+  );
+  assert_eq!(browser.calls(), 1, "one refusal is final for the read");
+}
+
+// A refusal whose page holds no challenge is not attempted at, and its words say so as they did before.
+#[tokio::test]
+async fn a_plain_refusal_in_the_browser_still_says_nothing_was_attempted() {
+  let browser = FakeBrowser::new(BrowserDocument {
+    status: 403,
+    title: "Forbidden".into(),
+    text: "Access denied".into(),
+    html: "<html><body><p>Access denied</p></body></html>".into(),
+    ..rendered()
+  });
+  let reading = session(every("denied", "text/plain", 403), browser, StandingClock::at(1_000_000));
+  let failed = reading.fetch_page("https://fixture.test/", &fallback()).await.unwrap_err();
+
+  assert!(failed.message.contains("no CAPTCHA or challenge was attempted"), "{failed}");
+}
+
+// The forcing read opens the browser at once, asks for the attempt, and carries its outcome beside the page.
+#[tokio::test]
+async fn the_forcing_read_sends_nothing_direct_and_names_what_it_met() {
+  let web = Arc::new(
+    Web::default()
+      .route("fixture.test", |_| answer(200, &[("content-type", "text/html")], b"<p>plain</p>")),
+  );
+  let browser = FakeBrowser::new(rendered());
+  let reading = session(web.clone(), browser.clone(), StandingClock::at(1_000_000));
+  let read = reading
+    .captcha(
+      "https://fixture.test/app",
+      &FetchPage {
+        browser_fallback: true,
+        browser_first: true,
+        ..FetchPage::default()
+      },
+    )
+    .await
+    .unwrap();
+
+  assert_eq!(read.challenge, ChallengeMark::NotAttempted);
+  assert_eq!(read.line(), "NO CHALLENGE");
+  assert!(browser.asked()[0].solve);
+  assert!(web.asked().is_empty(), "the forcing road asks the site only through the browser");
+}
+
 // Carried from packages/web/web.test.ts: opens the address asked for in Chrome when the direct client was sent to a login page
 #[tokio::test]
 async fn the_address_asked_for_is_opened_in_chrome_when_the_direct_client_was_sent_to_login() {
@@ -268,7 +352,7 @@ async fn the_address_asked_for_is_opened_in_chrome_when_the_direct_client_was_se
   let slice = reading.fetch_page(catalog, &fallback()).await.unwrap();
 
   assert_eq!(
-    browser.calls.lock().unwrap().iter().map(|(url, _)| url.as_str()).collect::<Vec<_>>(),
+    browser.calls.lock().unwrap().iter().map(|one| one.url.as_str()).collect::<Vec<_>>(),
     [catalog]
   );
   assert_eq!(slice.provenance, "browser");
@@ -344,6 +428,7 @@ async fn a_page_asked_for_fresh_is_rendered_in_a_browser_of_its_own_and_ended() 
       false,
       FetchOptions {
         arrived: Some(arrived),
+        ..FetchOptions::default()
       },
     )
     .await
@@ -354,7 +439,7 @@ async fn a_page_asked_for_fresh_is_rendered_in_a_browser_of_its_own_and_ended() 
   assert_eq!(started.lock().unwrap().len(), 3);
   assert_eq!((run.calls(), run.closed()), (2, false));
   assert_eq!(
-    run.calls.lock().unwrap().iter().map(|(_, arrived)| *arrived).collect::<Vec<_>>(),
+    run.calls.lock().unwrap().iter().map(|one| one.arrived).collect::<Vec<_>>(),
     [false, true]
   );
   reading.close().await;

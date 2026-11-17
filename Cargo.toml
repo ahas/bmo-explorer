@@ -6,6 +6,7 @@ members = [
   "tools/_shared/web",
   "tools/explorer",
   "tools/research",
+  "tools/web_captcha",
   "tools/web_fetch",
   "tools/web_search",
 ]

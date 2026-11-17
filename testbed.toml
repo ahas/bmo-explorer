@@ -40,6 +40,7 @@ binaries = [
   "bmo-explorer",
   "web-search-tool",
   "web-fetch-tool",
+  "web-captcha-tool",
   "research-tool",
   "web-helper",
   "explorer-tool",
@@ -101,6 +102,17 @@ rm -rf tools/web_fetch/.placed
 mkdir -p tools/web_fetch/.placed
 cp bin/web-fetch-tool tools/web_fetch/tool.toml tools/web_fetch/*.json tools/web_fetch/.placed/
 bmo pocket put tools/web_fetch/.placed --placed --service bmo-explorer --allow web.read
+'''
+
+[[deploy.step]]
+id = "register-web-captcha"
+phase = "before-flip"
+command = '''
+set -eu
+rm -rf tools/web_captcha/.placed
+mkdir -p tools/web_captcha/.placed
+cp bin/web-captcha-tool tools/web_captcha/tool.toml tools/web_captcha/*.json tools/web_captcha/.placed/
+bmo pocket put tools/web_captcha/.placed --placed --service bmo-explorer --allow web.read
 '''
 
 [[deploy.step]]

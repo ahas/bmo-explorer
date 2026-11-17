@@ -96,8 +96,12 @@ flowchart TD
   engine or a category that holds no image engine is refused `bad-request`. Pictures are deduplicated by their
   direct address and mixed one engine at a time, as text hits are.
 - **`explorer_web_fetch` reads by the plain road:** the direct client, then the real browser after a block
-  (docs/web-access.md, 「Strategies」); a PDF comes back as its text. A site tool's own reading of a page it
-  claims is a tool host's (docs/site-contract.md, 「A page a tool claims」), and the MCP server has none.
+  (docs/web-access.md, 「Strategies」); a challenge met in the browser is attempted once (docs/web-access.md,
+  「When the browser meets a challenge」); a PDF comes back as its text. A site tool's own reading of a page it
+  claims is a tool host's (docs/site-contract.md, 「A page a tool claims」), and the MCP server has none. The
+  `web_captcha` tool's forcing read — the page opened in the browser from the start, the challenge attempt
+  named in the answer — has no MCP form: a harness reads pages through this tool and meets the attempt on the
+  way.
 - **`explorer_link_preview` and `explorer_fetch_page` read the page directly,** checking the address and each
   redirect, at most 512 KiB of it, paced 250 ms apart per host.
 - **`explorer_link_preview` reads as a link previewer** (docs/web-access.md, 「Identities and headers」), so a
@@ -128,19 +132,20 @@ under way that it would cut (the receiver's `docs/boundary-api.md`, 「The servi
 |---|---|---|---|
 | `tools/web_search` | `web/web_search` | `web.read` | Asks the search engines directly and answers their hits as they came (docs/web-access.md) |
 | `tools/web_fetch` | `web/web_fetch` | `web.read` | Reads one page, answered by the site tool that claims its address where the record holds one (docs/site-contract.md, 「A page a tool claims」) |
+| `tools/web_captcha` | `web/web_captcha` | `web.read` | Reads one page in the real browser, attempting a CAPTCHA or browser challenge met on the way once (docs/web-access.md, 「When the browser meets a challenge」) |
 | `tools/research` | `web/research` | `web.branches` | Opens one research branch over an angle and answers its notes once it has ended (「The research branch」) |
 | `tools/explorer` | `explorer/fetch_raster`, `explorer/fetch_page`, `explorer/link_preview`, `explorer/search_engines`, `explorer/search_images` | none: for the system alone | A picture, a page's head, a link's preview, the engines' states and a picture search with its licence fields (below) |
-| `tools/_shared/web` | the shared helper `web` | | One record's web reading, which `web_search`, `web_fetch`, `research` and every placed site tool ask on its socket |
+| `tools/_shared/web` | the shared helper `web` | | One record's web reading, which `web_search`, `web_fetch`, `web_captcha`, `research` and every placed site tool ask on its socket |
 
-- **`web_search`, `web_fetch` and `research` name the helper `web`** among their shared helpers, and so does
-  every site tool a site-tool repository places; the host starts one helper a record and hands its socket to
-  every call naming it.
-- **`web_search`, `web_fetch` and `research` declare their line in the `web` listing** (the tool host's
-  `docs/api.md`, 「The manifest」, `[entry.listing]`), so a searcher's instructions, composed with that listing,
-  name the core tools ahead of every site tool: `web_search` first, `web_fetch` second and `research` after them,
-  each line headed with its name and saying what it answers, and a site tool's lines after them in the order of
-  the date it was made. A record whose capabilities hold no `web.branches` is shown no `research`, and so is told
-  of no branch.
+- **`web_search`, `web_fetch`, `web_captcha` and `research` name the helper `web`** among their shared helpers,
+  and so does every site tool a site-tool repository places; the host starts one helper a record and hands its
+  socket to every call naming it.
+- **`web_search`, `web_fetch`, `web_captcha` and `research` declare their line in the `web` listing** (the tool
+  host's `docs/api.md`, 「The manifest」, `[entry.listing]`), so a searcher's instructions, composed with that
+  listing, name the core tools ahead of every site tool: `web_search` first, `web_fetch` second, `web_captcha`
+  third and `research` after them, each line headed with its name and saying what it answers, and a site tool's
+  lines after them in the order of the date it was made. A record whose capabilities hold no `web.branches` is
+  shown no `research`, and so is told of no branch.
 - **No entry here declares a grant,** so a call of one is checked against the record's capabilities alone.
 - **No manifest here names a `timeout`:** the tool host ends a call only when it answers or its caller goes away
   (the tool host's `docs/api.md`, 「The manifest」), and a call that ends drops its read in the helper with it
@@ -216,6 +221,20 @@ alone, as long as the branch runs.
   dropped, which the research unit reads as the caller letting go of its branch, and the call answers `BRANCH
   REFUSED: this research reading is closing.` No branch is asked for after it.
 
+### The captcha read
+
+`web/web_captcha`, handed `url` and optionally `offset` and `max_chars`, reads one page on the forcing road: the
+real browser from the start, no direct attempt first, and a CAPTCHA or browser challenge met in the page
+attempted once under docs/web-access.md, 「When the browser meets a challenge」. Its answer is the page as
+`web_fetch` answers it, headed by one line: `CHALLENGE CLEARED` where a challenge stood and the retried read
+came through, `NO CHALLENGE` where the browser read the page with nothing to attempt. A challenge that stands
+after the one attempt is refused with the block's own words, saying it was attempted once and did not clear; it
+is never attempted twice in a call or by the tool asking again on its own. The read takes a page of the
+record's budget like a `web_fetch` of that address; a record reading `direct-only` is refused naming the
+strategy, and the read holds to every other rule of the record's reading. It exists for a turn that met a
+challenge on the plain road and judges this page worth the forcing read, and for a site known to stand behind
+one.
+
 ### The explorer entries
 
 A caller asks the tool host's control socket, `POST /tool-calls` with a tool session's token whose record names
@@ -255,7 +274,7 @@ the namespace `explorer`, with a JSON body naming the entry by `namespace` and `
 
 - **One JSON object on one line each way,** on the socket the tool host hands each call naming the helper under
   `shared.web`. The requests, their kinds and their answers are docs/site-contract.md's (「The web helper's
-  socket」): the core tools' requests (`search`, `fetch`, `picture`, `branch`), a site tool's roads
+  socket」): the core tools' requests (`search`, `fetch`, `captcha`, `picture`, `branch`), a site tool's roads
   (`page`, `rendered`, `engine`, `document`, `head`) and the research guard round a site tool's call
   (`opening`, `ended`).
 - **The helper is started by the tool host** with the kind `helper` and the socket it is to listen on, and ends

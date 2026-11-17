@@ -454,6 +454,29 @@ impl Running for ChromeRunning {
     })
   }
 
+  // One person's click at a point of the view: a press and a release over the same whole pixel, through the
+  // input domain, so the widget takes it as trusted.
+  fn click<'a>(&'a self, x: f64, y: f64) -> Answer<'a, WebResult<()>> {
+    Box::pin(async move {
+      let (x, y) = super::challenge::click_point(x, y);
+      let sender = &self.connection.sender;
+
+      sender
+        .command(
+          "Input.dispatchMouseEvent",
+          json!({ "type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1, "buttons": 1 }),
+        )
+        .await?;
+      sender
+        .command(
+          "Input.dispatchMouseEvent",
+          json!({ "type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1, "buttons": 0 }),
+        )
+        .await
+        .map(|_| ())
+    })
+  }
+
   fn watch(&self) -> &PageWatch {
     &self.watch.page
   }

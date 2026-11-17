@@ -1,0 +1,32 @@
+{
+  "properties": {
+    "max_chars": {
+      "description": "How many characters to return (default 20000).",
+      "format": "uint64",
+      "maximum": 100000,
+      "minimum": 1,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "offset": {
+      "description": "Character offset to start from (default 0).",
+      "format": "uint64",
+      "minimum": 0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "url": {
+      "description": "The URL to fetch.",
+      "format": "uri",
+      "type": "string"
+    }
+  },
+  "required": [
+    "url"
+  ],
+  "type": "object"
+}

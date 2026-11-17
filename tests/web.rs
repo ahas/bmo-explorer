@@ -3,6 +3,7 @@
 
 mod address;
 mod browser;
+mod browser_challenge;
 mod browser_copy;
 mod browser_display;
 mod browser_firefox;

@@ -163,6 +163,20 @@ pub struct Classified {
   pub text: String,
 }
 
+/// The words a page standing in place of its site's own is named with; the refusal statuses it came with are
+/// added in parentheses where there are any.
+pub const CHALLENGE: &str = "CAPTCHA or browser challenge";
+
+impl Classified {
+  /// Whether this classification named the page a challenge, with or without its statuses.
+  pub fn is_challenge(&self) -> bool {
+    self
+      .reason
+      .as_deref()
+      .is_some_and(|reason| reason == CHALLENGE || reason.starts_with(&format!("{CHALLENGE} (")))
+  }
+}
+
 /// What a page is classified from.
 #[derive(Default)]
 pub struct Fetched<'a> {
@@ -309,11 +323,7 @@ pub fn classify(input: &Fetched<'_>) -> Classified {
   let refusal = matches!(status, 403 | 418 | 420);
 
   if refusal && (structural || challenge_title || named) {
-    return classified(
-      Disposition::Blocked,
-      Some(format!("CAPTCHA or browser challenge (HTTP {status})")),
-      converted,
-    );
+    return classified(Disposition::Blocked, Some(format!("{CHALLENGE} (HTTP {status})")), converted);
   }
 
   if refusal || status == 429 {
@@ -329,7 +339,7 @@ pub fn classify(input: &Fetched<'_>) -> Classified {
   }
 
   if structural || challenge_title || (named && (form || status == 503)) {
-    return classified(Disposition::Blocked, Some("CAPTCHA or browser challenge".into()), converted);
+    return classified(Disposition::Blocked, Some(CHALLENGE.into()), converted);
   }
 
   if !(200..300).contains(&status) {

@@ -43,6 +43,15 @@ pub enum WebAsked {
     #[serde(default)]
     raw: bool,
   },
+  /// One page read on the forcing road: the browser from the start, a challenge met attempted once, the
+  /// attempt's outcome named in the answer (docs/web-access.md, 「When the browser meets a challenge」).
+  Captcha {
+    url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    offset: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    max_chars: Option<usize>,
+  },
   /// One picture by the address of its image file, answered as a picture.
   Picture { image: String },
   /// One research branch over the angle, answered once it has ended with its notes, or with the refusal.

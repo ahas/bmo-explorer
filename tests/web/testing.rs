@@ -129,17 +129,30 @@ pub fn check(clock: Arc<StandingClock>) -> Check {
   }
 }
 
-/// A browser answering every page with the one it was handed, counting its calls and whether it was closed.
+/// One fetch of the stand-in browser: the address it was sent, and what the read asked for.
+#[derive(Clone, Debug)]
+pub struct Called {
+  pub url: String,
+  pub arrived: bool,
+  pub solve: bool,
+}
+
+/// A browser answering every page with the ones it was handed, in order — the last of them ever after —
+/// counting its calls and whether it was closed.
 pub struct FakeBrowser {
-  pub document: BrowserDocument,
-  pub calls: Mutex<Vec<(String, bool)>>,
+  pages: Mutex<std::collections::VecDeque<BrowserDocument>>,
+  pub calls: Mutex<Vec<Called>>,
   pub closed: Mutex<bool>,
 }
 
 impl FakeBrowser {
   pub fn new(document: BrowserDocument) -> Arc<Self> {
+    Self::answering([document])
+  }
+
+  pub fn answering(documents: impl IntoIterator<Item = BrowserDocument>) -> Arc<Self> {
     Arc::new(Self {
-      document,
+      pages: Mutex::new(documents.into_iter().collect()),
       calls: Mutex::new(Vec::new()),
       closed: Mutex::new(false),
     })
@@ -147,6 +160,10 @@ impl FakeBrowser {
 
   pub fn calls(&self) -> usize {
     self.calls.lock().unwrap().len()
+  }
+
+  pub fn asked(&self) -> Vec<Called> {
+    self.calls.lock().unwrap().clone()
   }
 
   pub fn closed(&self) -> bool {
@@ -160,11 +177,15 @@ impl BrowserFetcher for FakeBrowser {
     url: String,
     options: FetchOptions,
   ) -> Pin<Box<dyn Future<Output = WebResult<BrowserDocument>> + Send + '_>> {
-    self.calls.lock().unwrap().push((url, options.arrived.is_some()));
+    self.calls.lock().unwrap().push(Called {
+      url,
+      arrived: options.arrived.is_some(),
+      solve: options.solve_challenge,
+    });
+    let mut pages = self.pages.lock().unwrap();
+    let second = if pages.len() > 1 { pages.pop_front() } else { pages.front().cloned() };
 
-    let document = self.document.clone();
-
-    Box::pin(async move { Ok(document) })
+    Box::pin(async move { Ok(second.unwrap_or_default()) })
   }
 
   fn close(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {

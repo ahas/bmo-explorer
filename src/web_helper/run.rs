@@ -13,7 +13,7 @@ use crate::tool::Session;
 use crate::web::address::Check;
 use crate::web::clock::{Clock, SystemClock};
 use crate::web::pacing::StorePacing;
-use crate::web::session::{FetchPage, FetchSlice, SessionParts, WebSession};
+use crate::web::session::{CaptchaRead, FetchPage, FetchSlice, SessionParts, WebSession};
 use crate::web::{Failure, WebError, WebResult};
 use crate::web_helper::branch::Branches;
 
@@ -23,6 +23,20 @@ pub const BUDGET_SPENT: &str = "BUDGET SPENT: this run has read every page its b
 
 /// The issuer's label a record's research settings stand under.
 pub const RESEARCH_LABEL: &str = "research";
+
+/// The refusal of a read this record's strategy keeps from the real browser.
+pub fn direct_only_refusal(url: &str) -> WebError {
+  let host = url::Url::parse(url)
+    .ok()
+    .and_then(|url| url.host_str().map(str::to_owned))
+    .unwrap_or_default();
+
+  WebError::new(
+    format!("{host} is served only to a real browser, and this run reads the web directly only"),
+    Failure::Blocked,
+  )
+  .with_url(url)
+}
 
 /// What a record's web tools are held to, and the run its research branches are asked for under, as its
 /// issuer's label `research` says (docs/api.md, 「What a placed tool reads of its record」). Any other key of
@@ -189,6 +203,34 @@ impl WebRun {
           browser_fallback: !self.research.direct_only(),
           browser_first: self.research.browser_first(),
           pdf_layout: layout,
+        },
+      )
+      .await
+  }
+
+  /// One page on the forcing road: the browser from the start and a challenge met on the way attempted once
+  /// (docs/web-access.md, 「When the browser meets a challenge」). A record reading `direct-only` is refused
+  /// naming the strategy; every other rule of the record's reading holds.
+  pub async fn solve_captcha(
+    &self,
+    url: &str,
+    offset: Option<usize>,
+    max_chars: Option<usize>,
+  ) -> WebResult<CaptchaRead> {
+    if self.research.direct_only() {
+      return Err(direct_only_refusal(url));
+    }
+
+    self
+      .session
+      .captcha(
+        url,
+        &FetchPage {
+          offset,
+          max_chars,
+          browser_fallback: true,
+          browser_first: true,
+          ..FetchPage::default()
         },
       )
       .await

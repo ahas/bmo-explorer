@@ -9,6 +9,7 @@
 //! What the two browsers share — the queue, the idle end, the watch for a page's arrival and the snapshot of a
 //! page that holds still — stands here; each product answers how it is started and how its page is driven.
 
+pub mod challenge;
 pub mod chrome;
 pub mod copy;
 pub mod detached;
@@ -30,7 +31,8 @@ use serde::Deserialize;
 use serde_json::Value;
 use tokio::task::JoinHandle;
 
-use crate::web::clock::now_ms;
+use crate::forms::classify::{Fetched, classify};
+use crate::web::clock::{self, Clock, now_ms};
 use crate::web::error::{Failure, WebError, WebResult};
 
 pub use chrome::{launch_arguments, launch_environment};
@@ -48,6 +50,21 @@ pub struct BrowserDocument {
   pub user_agent: String,
   pub webdriver: bool,
   pub truncated: bool,
+  /// What the read's one attempt at a met challenge came to (「When the browser meets a challenge」).
+  pub challenge: ChallengeMark,
+}
+
+/// What a read that asks for the attempt (docs/web-access.md, 「When the browser meets a challenge」) did
+/// about a challenge met in its page.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ChallengeMark {
+  /// The read met no challenge, or did not ask for the attempt.
+  #[default]
+  NotAttempted,
+  /// The attempt was made and the retried read answered a page that is no longer a challenge.
+  Cleared,
+  /// The attempt was made and the retried read answered a challenge again.
+  Remains,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
@@ -66,9 +83,28 @@ pub type UrlGuard =
 pub type Arrived = Arc<dyn Fn(&str, &str) -> bool + Send + Sync>;
 
 /// How one page is read, where its consumer knows more of its site than this layer does.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct FetchOptions {
   pub arrived: Option<Arrived>,
+  /// Whether a challenge met in the page is attempted once and the read retried
+  /// (docs/web-access.md, 「When the browser meets a challenge」); false where the road does not ask.
+  pub solve_challenge: bool,
+  /// The host's turn in its pacing queue, taken before the retried read opens the address again — every
+  /// top-level navigation waits, the retry included; none where the road holds no queue of its own.
+  pub pace: Option<Pace>,
+  /// The clock the attempt's waits stand on; the machine's own where none is handed, a test's otherwise.
+  pub clock: Arc<dyn Clock>,
+}
+
+impl Default for FetchOptions {
+  fn default() -> Self {
+    Self {
+      arrived: None,
+      solve_challenge: false,
+      pace: None,
+      clock: clock::system(),
+    }
+  }
 }
 
 /// What reads a page in a real browser: the machine's browser, or a test's stand-in.
@@ -166,6 +202,9 @@ pub trait Running: Send + Sync {
   fn open<'a>(&'a self, url: &'a str) -> Answer<'a, WebResult<()>>;
   /// An expression's value in the page, as plain JSON.
   fn evaluate<'a>(&'a self, expression: &'a str) -> Answer<'a, WebResult<Value>>;
+  /// One trusted click at a point of the page's view, through the browser's own input path: what a widget
+  /// of a challenge page accepts as a person's click.
+  fn click<'a>(&'a self, x: f64, y: f64) -> Answer<'a, WebResult<()>>;
   /// What the page's events have shown of the navigation under way.
   fn watch(&self) -> &PageWatch;
   /// Whether the page has come to rest (docs/web-access.md, 「Lifetime and cleanup」).
@@ -285,6 +324,21 @@ fn is_web(url: &str) -> bool {
   let lower = url.get(..6).unwrap_or(url).to_ascii_lowercase();
 
   lower.starts_with("http:") || lower.starts_with("https:")
+}
+
+// Whether a browser's page reads, by the same classification every page read passes, as a challenge standing
+// in place of its site's page (docs/web-access.md, 「How a fetched page is classified」).
+fn stands_a_challenge(document: &BrowserDocument, requested_url: &str) -> bool {
+  classify(&Fetched {
+    status: document.status,
+    content_type: &document.content_type,
+    body: &document.html,
+    title: Some(&document.title),
+    visible_text: Some(&document.text),
+    requested_url: Some(requested_url),
+    final_url: Some(&document.url),
+  })
+  .is_challenge()
 }
 
 fn snapshot_expression() -> String {
@@ -426,10 +480,12 @@ impl Browser {
       user_agent: snapshot.user_agent,
       webdriver: snapshot.webdriver,
       truncated: snapshot.truncated,
+      challenge: ChallengeMark::NotAttempted,
     })
   }
 
-  async fn navigate(
+  // The page opened, watched to its arrival if one was named, and read once it holds still.
+  async fn read_opened(
     &self,
     running: &dyn Running,
     url: &str,
@@ -437,7 +493,6 @@ impl Browser {
   ) -> WebResult<BrowserDocument> {
     let watch = running.watch();
 
-    (self.inner.guard)(url.to_owned()).await?;
     *locked(&watch.response) = None;
     *locked(&watch.blocked) = None;
 
@@ -497,7 +552,40 @@ impl Browser {
       return Err(refusal);
     }
 
+    Ok(document)
+  }
+
+  async fn navigate(
+    &self,
+    running: &dyn Running,
+    url: &str,
+    options: &FetchOptions,
+  ) -> WebResult<BrowserDocument> {
+    (self.inner.guard)(url.to_owned()).await?;
+    let mut document = self.read_opened(running, url, options).await?;
+
     (self.inner.guard)(document.url.clone()).await?;
+
+    // One attempt at a challenge met in the page, then the address opened once more: the read's one retry,
+    // after the host's turn in its queue as every top-level navigation takes
+    // (docs/web-access.md, 「When the browser meets a challenge」). A refusal whose page holds no challenge is
+    // answered as it stands, and a challenge that stands after this is the caller's to refuse.
+    if options.solve_challenge && stands_a_challenge(&document, url) {
+      challenge::attempt(running, &*options.clock).await;
+
+      if let Some(pace) = &options.pace {
+        pace(url.to_owned()).await?;
+      }
+
+      document = self.read_opened(running, url, options).await?;
+      (self.inner.guard)(document.url.clone()).await?;
+      document.challenge = if stands_a_challenge(&document, url) {
+        ChallengeMark::Remains
+      } else {
+        ChallengeMark::Cleared
+      };
+    }
+
     Ok(document)
   }
 

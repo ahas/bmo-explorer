@@ -38,6 +38,11 @@ pub async fn answer(run: &WebRun, asked: WebAsked) -> Value {
       max_chars,
       raw,
     } => written(fetch(run, &url, offset, max_chars, raw).await),
+    WebAsked::Captcha {
+      url,
+      offset,
+      max_chars,
+    } => written(captcha(run, &url, offset, max_chars).await),
     WebAsked::Picture { image } => written(picture(run, &image).await),
     WebAsked::Branch { angle } => written(Answer::text(branch::open(run, &angle).await)),
     WebAsked::Page { url, request } => written(run.page(&url, request).await),
@@ -122,6 +127,21 @@ async fn fetch(
 
   match run.read_page(url, offset, Some(max_chars), raw, false).await {
     Ok(slice) => Answer::text(render_slice(&slice)),
+    Err(error) => run.failed(&error),
+  }
+}
+
+// The forcing read: the page as `web_fetch` answers it, headed by what the challenge attempt came to
+// (docs/api.md, 「The captcha read」).
+async fn captcha(run: &WebRun, url: &str, offset: Option<usize>, max_chars: Option<usize>) -> Answer {
+  if let Some(refused) = run.guard.take_page(Some(url)) {
+    return Answer::text(refused);
+  }
+
+  let max_chars = max_chars.map_or(DEFAULT_FETCH_CHARS, |chars| chars.clamp(1, MAX_FETCH_CHARS));
+
+  match run.solve_captcha(url, offset, Some(max_chars)).await {
+    Ok(read) => Answer::text(format!("{}\n{}", read.line(), render_slice(&read.slice))),
     Err(error) => run.failed(&error),
   }
 }

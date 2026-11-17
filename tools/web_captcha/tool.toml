@@ -1,0 +1,25 @@
+# The forcing read: one page in the real browser with a CAPTCHA or browser challenge met on the way attempted
+# once (docs/web-access.md, 「When the browser meets a challenge」). The repository's tools test holds the entry
+# here to the tool answering it.
+
+[tool]
+name = "web_captcha"
+protocol = 1
+language = "rust"
+build = 'cargo build --release -p web-captcha-tool && cp "$BMO_CARGO_TARGET/release/web-captcha-tool" "$BMO_TOOL_OUT/"'
+check = 'cargo test --test main tools::'
+run = ["web-captcha-tool"]
+shared = ["web"]
+
+[[entry]]
+namespace = "web"
+name = "web_captcha"
+title = "Web captcha"
+description = "Reads one page on the forcing road: the real browser from the start, no direct attempt first, and a CAPTCHA or browser challenge met in the page attempted once — the site's own check handed through to its end and a visible challenge box clicked, then the page opened once more. The answer is the page as web_fetch returns it, headed CHALLENGE CLEARED where a challenge stood and the retry came through, or NO CHALLENGE where the browser met none. A challenge that stands after the one attempt is refused with its own words and never attempted twice; nothing is solved by reading pictures, answering puzzles or a solving service."
+input = "web_captcha.json"
+hints = { read_only = true, open_world = true }
+capabilities = ["web.read"]
+
+[entry.listing]
+line = "- web_captcha — one page read in the real browser with a CAPTCHA or challenge met on the way attempted once and the page opened once more, the answer headed with what the attempt came to"
+order = 3
