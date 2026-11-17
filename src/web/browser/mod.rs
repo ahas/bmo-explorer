@@ -81,6 +81,74 @@ pub trait BrowserFetcher: Send + Sync {
   fn close(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
 }
 
+/// What a read waits for before a browser opens a page of a host: the host's turn in its pacing queue.
+pub type Pace = Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = WebResult<()>> + Send>> + Send + Sync>;
+
+/// This machine's browser (docs/web-access.md, 「Which browser」): Firefox on a copy of the owner's profile where
+/// the machine has one, with Chrome on a temporary profile after a refusal of it; Chrome alone otherwise.
+pub fn on_this_machine(guard: UrlGuard, pace: Pace) -> Arc<dyn BrowserFetcher> {
+  let chrome = Arc::new(Browser::new(guard.clone(), Box::new(chrome::Chrome::installed())));
+
+  match firefox::Firefox::on_this_machine() {
+    Some(firefox) => {
+      Arc::new(Fallback::new(Arc::new(Browser::new(guard, Box::new(firefox))), chrome, pace))
+    }
+    None => chrome,
+  }
+}
+
+/// Whether a page's status is its site's outright refusal of the browser.
+pub fn refused(status: u16) -> bool {
+  matches!(status, 403 | 418 | 420 | 429)
+}
+
+/// One browser read first and another after it, where the site refused the first outright or the first could
+/// not be started: the second's page is taken where its site did not refuse it too, and the first's answer
+/// otherwise. The second read waits for the host's pacing first, as every top-level navigation does.
+pub struct Fallback {
+  first: Arc<dyn BrowserFetcher>,
+  then: Arc<dyn BrowserFetcher>,
+  pace: Pace,
+}
+
+impl Fallback {
+  pub fn new(first: Arc<dyn BrowserFetcher>, then: Arc<dyn BrowserFetcher>, pace: Pace) -> Self {
+    Self { first, then, pace }
+  }
+}
+
+impl BrowserFetcher for Fallback {
+  fn fetch(
+    &self,
+    url: String,
+    options: FetchOptions,
+  ) -> Pin<Box<dyn Future<Output = WebResult<BrowserDocument>> + Send + '_>> {
+    Box::pin(async move {
+      let read = self.first.fetch(url.clone(), options.clone()).await;
+      let turned_away = match &read {
+        Ok(page) => refused(page.status),
+        Err(error) => error.kind == Failure::BrowserUnavailable,
+      };
+
+      if !turned_away || (self.pace)(url.clone()).await.is_err() {
+        return read;
+      }
+
+      match self.then.fetch(url, options).await {
+        Ok(page) if !refused(page.status) => Ok(page),
+        _ => read,
+      }
+    })
+  }
+
+  fn close(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
+    Box::pin(async move {
+      self.first.close().await;
+      self.then.close().await;
+    })
+  }
+}
+
 /// A future a product's browser answers with.
 pub type Answer<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -310,15 +378,6 @@ impl Browser {
         idle: Mutex::new(None),
         closing: AtomicBool::new(false),
       }),
-    }
-  }
-
-  /// This machine's browser (docs/web-access.md, 「Which browser」): Firefox on a copy of the owner's profile
-  /// where the machine has one, Chrome on a temporary profile otherwise.
-  pub fn on_this_machine(guard: UrlGuard) -> Self {
-    match firefox::Firefox::on_this_machine() {
-      Some(firefox) => Self::new(guard, Box::new(firefox)),
-      None => Self::new(guard, Box::new(chrome::Chrome::installed())),
     }
   }
 

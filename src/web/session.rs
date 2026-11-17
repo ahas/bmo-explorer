@@ -7,9 +7,10 @@ use std::sync::Arc;
 use url::Url;
 
 use crate::web::address::{Check, host_of, web_url};
-use crate::web::browser::{Browser, BrowserDocument, BrowserFetcher, FetchOptions, UrlGuard};
+use crate::web::browser::{BrowserDocument, BrowserFetcher, FetchOptions, Pace, UrlGuard};
 use crate::web::classify::{Disposition, Fetched, classify};
 use crate::web::client::{Direct, DirectBytes, Transport, decode};
+use crate::web::clock::Clock;
 use crate::web::error::{Failure, WebError, WebResult};
 use crate::web::jar::Jar;
 use crate::web::pacing::{Pacing, wait_for_host};
@@ -53,6 +54,20 @@ pub fn raw_url_for(url: &str) -> String {
 }
 
 // The page as the browser rendered it, with the links its text does not already name.
+// A page host's turn in its pacing queue: every request to a host, and every top-level navigation of a browser,
+// takes one.
+async fn wait_for_page(
+  store: &dyn Pacing,
+  clock: &dyn Clock,
+  interval_ms: u64,
+  url: &str,
+) -> WebResult<()> {
+  let host = web_url(url).map(|url| host_of(&url)).unwrap_or_default();
+
+  wait_for_host(store, &format!("page:{host}"), interval_ms, clock).await?;
+  Ok(())
+}
+
 fn browser_text(document: &BrowserDocument) -> String {
   let text = crate::web::classify::tidy(&document.text.replace('\u{a0}', " "));
   let links: Vec<String> = document
@@ -140,21 +155,24 @@ impl WebSession {
   fn own_browser(&self) -> Arc<dyn BrowserFetcher> {
     match &self.parts.browsers {
       Some(make) => make(self.guard()),
-      None => Arc::new(Browser::on_this_machine(self.guard())),
+      None => crate::web::browser::on_this_machine(self.guard(), self.page_pace()),
     }
   }
 
-  async fn wait_for_page_host(&self, url: &str) -> WebResult<()> {
-    let host = web_url(url).map(|url| host_of(&url)).unwrap_or_default();
+  // A page host's turn in its pacing queue, as a browser's second read of a page waits for it.
+  fn page_pace(&self) -> Pace {
+    let (store, clock, interval_ms) =
+      (self.parts.store.clone(), self.parts.check.clock.clone(), self.parts.host_interval_ms);
 
-    wait_for_host(
-      &*self.parts.store,
-      &format!("page:{host}"),
-      self.parts.host_interval_ms,
-      &*self.parts.check.clock,
-    )
-    .await?;
-    Ok(())
+    Arc::new(move |url: String| {
+      let (store, clock) = (store.clone(), clock.clone());
+
+      Box::pin(async move { wait_for_page(&*store, &*clock, interval_ms, &url).await })
+    })
+  }
+
+  async fn wait_for_page_host(&self, url: &str) -> WebResult<()> {
+    wait_for_page(&*self.parts.store, &*self.parts.check.clock, self.parts.host_interval_ms, url).await
   }
 
   fn direct(&self) -> Direct<'_> {

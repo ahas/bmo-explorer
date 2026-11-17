@@ -1,3 +1,4 @@
+use super::testing::FakeBrowser;
 use bmo_explorer::web::browser::*;
 use bmo_explorer::web::clock::{Clock, StandingClock};
 use bmo_explorer::web::error::Failure;
@@ -113,4 +114,43 @@ async fn the_address_is_watched_until_the_page_has_arrived_or_has_come_to_rest()
 
   assert!(looked > 1);
   assert!(await_arrival(arriving, &arrived, || clock.now() >= rested_at, &*clock).await);
+}
+
+// A site that refuses the first browser outright has its page read in the second, after the host's pacing;
+// a page the first was let into, or one both were refused, stays the first's.
+#[tokio::test]
+async fn a_page_refused_to_the_first_browser_is_read_in_the_second_after_the_hosts_pacing() {
+  let page = |status: u16, title: &str| BrowserDocument {
+    status,
+    title: title.to_owned(),
+    ..BrowserDocument::default()
+  };
+  let paced = Arc::new(AtomicUsize::new(0));
+  let pace: Pace = {
+    let paced = paced.clone();
+
+    Arc::new(move |_| {
+      paced.fetch_add(1, Ordering::SeqCst);
+      Box::pin(async { Ok(()) })
+    })
+  };
+  let read = async |first: u16, then: u16| {
+    let (one, two) = (FakeBrowser::new(page(first, "first")), FakeBrowser::new(page(then, "then")));
+    let browser = Fallback::new(one.clone(), two.clone(), pace.clone());
+    let title = browser
+      .fetch("https://site.example/".into(), FetchOptions::default())
+      .await
+      .unwrap()
+      .title;
+
+    browser.close().await;
+    assert!(one.closed() && two.closed());
+    (title, two.calls())
+  };
+
+  assert_eq!(read(403, 200).await, ("then".to_owned(), 1));
+  assert_eq!(paced.load(Ordering::SeqCst), 1);
+  assert_eq!(read(200, 200).await, ("first".to_owned(), 0));
+  assert_eq!(read(429, 403).await, ("first".to_owned(), 1));
+  assert!(refused(418) && refused(420) && !refused(404) && !refused(503));
 }

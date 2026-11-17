@@ -217,6 +217,12 @@
     home folder; `BMO_FIREFOX_PATH` and `BMO_FIREFOX_PROFILES` name others, and an empty
     `BMO_FIREFOX_PROFILES` names none. The profile is the one the folder's `profiles.ini` makes Firefox open
     by default.
+- **Chrome after a refusal of Firefox:** a site that refuses the owner's Firefox outright — the page it
+  answers with `403`, `418`, `420` or `429` — or a Firefox that cannot be started has the page read once
+  more in Chrome on a temporary profile, after the host's own pacing interval, and Chrome's page is taken
+  where that site did not refuse it too. Some sites' edges refuse a remote-controlled Firefox at its first
+  request whatever its profile, and let the same machine's Chrome through; the owner's profile is for
+  being let in, and the fallback keeps every page Chrome alone was let into before.
 - **Chrome on a fresh temporary profile everywhere else:** a machine with no such Firefox profile, another
   node among them, reads with standard Chrome on a profile made for it and deleted after it.
 - **The owner's profile is only ever read.** It is copied file by file into a new folder at each start, and
