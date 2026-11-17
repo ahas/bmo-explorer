@@ -44,9 +44,6 @@ for a research branch (`docs/api.md`, 「What this repository calls」).
 - **Documents state what is true now:** no change history, no quoted source and no file-and-line pins.
 - **A general format is read by a maintained library,** never by a parser written here; a reading no library
   gives says why beside its code.
-- **`.graph/` is the code dependency graph**, written only by `bmo-graph` run in this checkout; a change that
-  moves a feature's files updates its node in the checkout. Its area files are generated and untracked, so a
-  fresh checkout builds them again, while `settings.toml` is the repository's configuration and stays tracked.
 
 ## Checks
 

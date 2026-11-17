@@ -1,7 +1,0 @@
-repository = "bmo-explorer"
-base = false
-
-[coverage]
-# Every Cargo package's src/, which is the workspace root's src/: the tools' packages keep their entry at the
-# package root, and the repository has no client project. No file in the coverage carries no node.
-layout = "bmo-next"
