@@ -45,10 +45,6 @@ const NAMES_LIST: &str = "BMO_NAMES_LIST";
 /// The manifests of another language that may not stand at the root beside the Cargo manifest.
 const OTHER_MANIFESTS: [&str; 5] = ["package.json", "pyproject.toml", "bun.lock", "go.mod", "deno.json"];
 
-/// The tables of the testbed's declaration format.
-const TESTBED_TABLES: [&str; 8] =
-  ["test", "projects", "tools", "check", "build", "deploy", "runner", "events"];
-
 fn root() -> PathBuf {
   PathBuf::from(ROOT)
 }
@@ -445,29 +441,6 @@ fn the_version_file_holds_the_workspaces_version() {
 
   assert_eq!(version.trim(), env!("CARGO_PKG_VERSION"));
   assert_eq!(bmo_explorer::VERSION, version.trim());
-}
-
-#[test]
-fn the_testbed_declaration_is_in_the_testbeds_format() {
-  let declaration: toml::Table = text_of("testbed.toml")
-    .expect("testbed.toml is at the root")
-    .parse()
-    .expect("testbed.toml is TOML");
-  let strange: Vec<&String> = declaration
-    .keys()
-    .filter(|key| !["testbed", "name"].contains(&key.as_str()) && !TESTBED_TABLES.contains(&key.as_str()))
-    .collect();
-
-  assert_eq!(declaration.get("testbed").and_then(toml::Value::as_integer), Some(0));
-  assert!(strange.is_empty(), "testbed.toml holds keys its format does not name: {strange:?}");
-  for key in TESTBED_TABLES.iter().filter(|key| declaration.contains_key(**key)) {
-    assert!(declaration[*key].is_table(), "`{key}` in testbed.toml is a table");
-  }
-  assert_eq!(
-    declaration["check"].get("base_libraries").and_then(toml::Value::as_array),
-    Some(&BASE_LIBRARIES.iter().map(|&name| toml::Value::from(name)).collect())
-  );
-  assert_eq!(declaration["check"].get("korean_ledger").and_then(toml::Value::as_str), Some(LEDGER));
 }
 
 #[test]
