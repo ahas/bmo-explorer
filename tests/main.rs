@@ -7,7 +7,6 @@ mod forms;
 mod import;
 mod mcp;
 mod openapi;
-mod personal_data;
 mod repository;
 mod site;
 mod store;

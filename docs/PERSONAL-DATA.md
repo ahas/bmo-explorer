@@ -30,9 +30,9 @@ The reserved example domains (`example.com`, `example.net` and `example.org`, an
 
 ## The check
 
-`tests/personal_data.rs` reads every file git tracks or would track and fails where it finds a mail
-address, a home path that names an account, a telephone number, a token or a private network address. A
-finding names the file, the line and the kind, never the value it found.
+The testbed's `personal-data` check, which the declaration enables, reads every file git tracks or would
+track and fails where it finds a mail address, a home path that names an account, a telephone number, a
+token or a private network address. A finding names the file, the line and the kind, never the value it found.
 
 The check keeps the forms, not a list of names or values to look for: such a list would itself be the
 personal data the rule keeps out.

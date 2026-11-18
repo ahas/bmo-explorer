@@ -33,7 +33,7 @@ for a research branch (`docs/api.md`, 「What this repository calls」).
   count of lines holding it stands in `korean-ledger.json`.
 - **No personal data**, as `docs/PERSONAL-DATA.md` states it: no agent, owner or machine name, mail address, home
   path, telephone number, token or private network address in code, documents or commits; tests use neutral
-  names. `tests/personal_data.rs` fails on each of those forms in any tracked file, naming the file, the line and
+  names. The testbed's `personal-data` check fails on each of those forms in any tracked file, naming the file, the line and
   the kind but never the value. `tests/repository.rs` reads the names from the list `BMO_NAMES_LIST` names,
   since no repository keeps such a list.
 - **Tests live in `tests/`.** No test module sits in `src/` or beside a tool's code. The Rust tests are one test

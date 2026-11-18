@@ -46,11 +46,11 @@ fn check(lookup: Arc<dyn Lookup>) -> Check {
 
 #[test]
 fn a_special_purpose_range_is_refused_by_its_own_prefix_and_not_the_public_block_beside_it() {
-  let (ten, hundred, unique, link) = ("10", "100", "fd", "fe80");
+  let (ten, hundred, metadata, unique, link) = ("10", "100", "169", "fd", "fe80");
   for refused in [
     format!("{ten}.1.2.3"),
     "127.0.0.1".to_owned(),
-    "169.254.169.254".to_owned(),
+    format!("{metadata}.254.{metadata}.254"),
     format!("{hundred}.64.0.1"),
     "192.0.0.8".to_owned(),
     "198.18.0.1".to_owned(),
