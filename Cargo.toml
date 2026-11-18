@@ -43,7 +43,6 @@ oxc_ast_visit = "=0.153.0"
 oxc_parser = "=0.153.0"
 oxc_span = "=0.153.0"
 percent-encoding = "2.3.2"
-pulldown-cmark = { version = "0.13.6", default-features = false }
 rand = "0.9.2"
 rav1d = { version = "1.1.0", default-features = false, features = ["bitdepth_8", "bitdepth_16"] }
 regex = "1.11.1"
@@ -138,8 +137,6 @@ url.workspace = true
 axum.workspace = true
 # A test's own folder and files, gone with it.
 tempfile.workspace = true
-# The README's folder table, read as markdown.
-pulldown-cmark.workspace = true
 
 [[test]]
 name = "main"

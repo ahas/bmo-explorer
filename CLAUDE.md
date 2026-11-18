@@ -23,7 +23,7 @@ for a research branch (`docs/api.md`, 「What this repository calls」).
   it wrong or incomplete repairs it first, stating what is true now, and the code is then written to match.
 - **No dependency from another repository but the base libraries** `bmo-chat`, `bmo-chat-client`, `bmo-ui` and
   `bmo-markup`: no `bmo-*` crate or package of another unit, no path outside the repository, no git source.
-  Another unit is reached over the API `docs/api.md` states. `tests/repository.rs` fails on any of these.
+  Another unit is reached over the API `docs/api.md` states. The testbed's `dependencies` check fails on any of these.
 - **One crate.** The repository's code is the package `bmo-explorer` under `src/`, split into modules; each
   tool the tool host places is a member of its own under `tools/`, since each is an executable the host starts.
   No `crates/` folder.
