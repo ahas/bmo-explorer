@@ -276,6 +276,11 @@
   adds no stealth option: nothing alters its `navigator.webdriver` or client hints.
 - **Its own screen:** a dedicated virtual X server (Xvfb) the web layer starts for this browser.
   - Xvfb picks a free display number itself and reports it, so it never collides with another X server.
+  - **A killed display leaves nothing behind for long.** Xvfb ended by `SIGKILL` (its parent's death) leaves its
+    lock file and socket under `/tmp`, and its search for a free number starts at display 0; left to pile up they
+    spend every number up to the ones the login screen's own server needs, and the remote desktop's login screen
+    cannot start. So before a display starts, every lock file this account owns whose server no longer runs is
+    removed with its socket; another account's lock and a running server's are left alone.
   - It accepts connections only with a random cookie kept inside the browser's profile folder, and does
     not listen on TCP.
 - **Kept off the person's desktop:** the browser opens no window in the person's desktop session, and

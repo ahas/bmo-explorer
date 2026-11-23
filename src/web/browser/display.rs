@@ -1,7 +1,8 @@
 //! A virtual X server the web layer starts for a browser of its own (docs/web-access.md, 「How the browser is
 //! started」), so a non-headless browser never opens a window on a person's desktop session, never reaches that session's
 //! D-Bus and never asks its keyring for anything. The server picks a free display number itself and accepts
-//! only the random cookie written beside it, and it dies with the process that started it.
+//! only the random cookie written beside it, and it dies with the process that started it. The lock files and sockets
+//! a killed server leaves are swept before the next one starts.
 
 use std::collections::BTreeMap;
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
@@ -64,10 +65,70 @@ pub fn authority_entry(cookie: &[u8]) -> Vec<u8> {
   entry
 }
 
+/// Where X servers keep their lock files and sockets.
+const X_LOCKS: &str = "/tmp";
+const X_SOCKETS: &str = "/tmp/.X11-unix";
+
+/// Removes, under `locks` and `sockets`, every display lock file this account owns whose server is gone, with its
+/// socket: a server ended by `SIGKILL` (its parent's death, a fence) leaves both behind, and Xvfb's `-displayfd`
+/// search starts at display 0, so left alone they pile up until the numbers the login screen's own server takes
+/// are spent and it cannot start (docs/web-access.md, 「How the browser is started」). Another account's lock and
+/// a lock whose server still runs are left as they stand. Answers how many it removed.
+pub fn sweep_stale_displays(locks: &Path, sockets: &Path) -> usize {
+  // SAFETY: getuid has no preconditions and cannot fail.
+  let me = unsafe { libc::getuid() };
+  let Ok(entries) = std::fs::read_dir(locks) else { return 0 };
+  let mut removed = 0;
+
+  for entry in entries.flatten() {
+    let name = entry.file_name();
+    let Some(number) = name
+      .to_str()
+      .and_then(|name| name.strip_prefix(".X"))
+      .and_then(|rest| rest.strip_suffix("-lock"))
+      .filter(|number| !number.is_empty() && number.bytes().all(|b| b.is_ascii_digit()))
+      .map(str::to_owned)
+    else {
+      continue;
+    };
+    let Ok(meta) = std::fs::symlink_metadata(entry.path()) else { continue };
+
+    if std::os::unix::fs::MetadataExt::uid(&meta) != me {
+      continue;
+    }
+
+    let holder = std::fs::read_to_string(entry.path())
+      .ok()
+      .and_then(|text| text.trim().parse::<i32>().ok());
+    // SAFETY: signal 0 only asks whether the process exists; nothing is sent.
+    let alive = holder.is_some_and(|pid| pid > 0 && unsafe { libc::kill(pid, 0) } == 0);
+
+    if alive {
+      continue;
+    }
+
+    if std::fs::remove_file(entry.path()).is_ok() {
+      removed += 1;
+    }
+
+    let socket = sockets.join(format!("X{number}"));
+
+    if std::fs::symlink_metadata(&socket).is_ok_and(|meta| std::os::unix::fs::MetadataExt::uid(&meta) == me)
+    {
+      let _ = std::fs::remove_file(socket);
+    }
+  }
+
+  removed
+}
+
 impl PrivateDisplay {
   /// The server started under `dir`, which the caller owns and removes, waited for until it names its display.
-  /// A server that ends its output without naming one is stopped and reported unavailable.
+  /// A server that ends its output without naming one is stopped and reported unavailable. The stale displays this
+  /// account left are swept first (「sweep_stale_displays」).
   pub async fn start(dir: &Path) -> WebResult<Self> {
+    sweep_stale_displays(Path::new(X_LOCKS), Path::new(X_SOCKETS));
+
     let xvfb = std::env::var("BMO_XVFB_PATH").unwrap_or_else(|_| "/usr/bin/Xvfb".into());
     let setpriv = setpriv();
 
