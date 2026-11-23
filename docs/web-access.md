@@ -386,6 +386,12 @@
     firing no load for that tab at all. So once the navigation's document has committed, Firefox's wait
     also asks the tab, a few times a second, whether the document standing in it has loaded, and one that
     has ends the wait as its load event would.
+  - A page whose own document has loaded its content, its DOMContentLoaded fired, while a request of the
+    page holds its load event back is read without that load: ten seconds after the content loaded, the
+    wait ends in either browser as the load event would end it, and the page is read as it stands. A
+    finance page's advertisements keep its load nine seconds or more behind its content on this network,
+    and a request that never finishes would hold the load back for good. The ten seconds say when such a
+    page is read; they never fail the read.
 - **A dialog a page opens is answered at once,** in every browser: an alert, a confirm and a prompt are
   dismissed, as a person closes one without agreeing to anything, and a question before the page unloads is
   accepted, so the navigation the read asked for goes on. A dialog left standing holds the page's scripts

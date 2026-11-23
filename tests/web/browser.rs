@@ -151,3 +151,14 @@ fn a_page_that_leaves_its_tab_for_no_web_page_fails_the_read_with_its_dialogs_wo
       .contains("dialog")
   );
 }
+
+// A page whose content has loaded while a request of it holds its load event back is read without that load
+// once its content has stood loaded for the bound; before its content has loaded, nothing ends the wait.
+#[test]
+fn a_page_is_read_without_its_load_once_its_content_has_stood_loaded_long_enough() {
+  let content = 50_000;
+
+  assert!(!read_without_load(None, content + 10 * LOAD_AFTER_CONTENT_MS));
+  assert!(!read_without_load(Some(content), content + LOAD_AFTER_CONTENT_MS - 1));
+  assert!(read_without_load(Some(content), content + LOAD_AFTER_CONTENT_MS));
+}

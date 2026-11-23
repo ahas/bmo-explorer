@@ -128,6 +128,17 @@ pub trait BrowserFetcher: Send + Sync {
   fn close(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
 }
 
+/// How long after its document's content has loaded a page is waited on for its load event before it is read
+/// without it (docs/web-access.md, 「Lifetime and cleanup」).
+pub const LOAD_AFTER_CONTENT_MS: u64 = 10_000;
+
+/// Whether a navigation whose document's content loaded at `content_loaded_ms`, none where it has not yet, is
+/// read without its load event at `now_ms`: once the content has stood loaded for `LOAD_AFTER_CONTENT_MS`. It says
+/// when the page is read and never fails the read.
+pub fn read_without_load(content_loaded_ms: Option<u64>, now_ms: u64) -> bool {
+  content_loaded_ms.is_some_and(|loaded| now_ms.saturating_sub(loaded) >= LOAD_AFTER_CONTENT_MS)
+}
+
 /// Whether a dialog a page opened is accepted (docs/web-access.md, 「Lifetime and cleanup」), by the kind both
 /// browsers' protocols name it with: a question before the page unloads is, so the read's navigation goes on;
 /// an alert, a confirm and a prompt are dismissed, as a person closes one without agreeing to anything.

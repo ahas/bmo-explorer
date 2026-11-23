@@ -29,7 +29,7 @@ use tokio::task::JoinHandle;
 
 use super::{
   Answer, DocumentResponse, Gesture, PageWatch, Product, Running, UrlGuard, accepts_dialog, copy, display,
-  fails_the_page, is_web, locked, navigation_failure, places, profile, proxy, remote,
+  fails_the_page, is_web, locked, navigation_failure, places, profile, proxy, read_without_load, remote,
 };
 use crate::web::clock::now_ms;
 use crate::web::error::{Failure, WebError, WebResult};
@@ -42,13 +42,14 @@ const ANNOUNCED: &str = "WebDriver BiDi listening on ";
 const UNMARKED: &str = "() => { Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false, configurable: true }); }";
 
 /// The events the browser is asked for: each request's start, end and failure, each navigation's start, commit,
-/// load, failure and turn into a download, and each dialog a page opens.
-const EVENTS: [&str; 9] = [
+/// loaded content, load, failure and turn into a download, and each dialog a page opens.
+const EVENTS: [&str; 10] = [
   "network.beforeRequestSent",
   "network.responseCompleted",
   "network.fetchError",
   "browsingContext.navigationStarted",
   "browsingContext.navigationCommitted",
+  "browsingContext.domContentLoaded",
   "browsingContext.load",
   "browsingContext.navigationFailed",
   "browsingContext.downloadWillBegin",
@@ -283,6 +284,8 @@ struct Traffic {
   arrived: std::sync::atomic::AtomicBool,
   // Whether the navigation last begun in the main tab has committed its document to the tab.
   committed: std::sync::atomic::AtomicBool,
+  // When that navigation's document loaded its content, 0 until it has.
+  content_loaded_ms: AtomicU64,
   quiet: Quiet,
   load: tokio::sync::watch::Sender<Load>,
 }
@@ -295,6 +298,7 @@ impl Traffic {
       navigation: Mutex::default(),
       arrived: std::sync::atomic::AtomicBool::new(false),
       committed: std::sync::atomic::AtomicBool::new(false),
+      content_loaded_ms: AtomicU64::new(0),
       quiet: Quiet::default(),
       load: tokio::sync::watch::Sender::new(Load::Loaded),
     }
@@ -317,6 +321,11 @@ impl Traffic {
 
       loading
     });
+  }
+
+  // When the navigation under way loaded its document's content, where it has.
+  fn content_loaded(&self) -> Option<u64> {
+    Some(self.content_loaded_ms.load(Ordering::SeqCst)).filter(|at| *at > 0)
   }
 
   // Whether an event is of the navigation standing in the main tab.
@@ -377,10 +386,14 @@ impl Traffic {
         *locked(&self.navigation) = params["navigation"].as_str().map(str::to_owned);
         self.arrived.store(false, Ordering::SeqCst);
         self.committed.store(false, Ordering::SeqCst);
+        self.content_loaded_ms.store(0, Ordering::SeqCst);
         self.load.send_replace(Load::Loading);
       }
       "browsingContext.navigationCommitted" if self.current(params) => {
         self.committed.store(true, Ordering::SeqCst);
+      }
+      "browsingContext.domContentLoaded" if self.current(params) => {
+        self.content_loaded_ms.store(now_ms(), Ordering::SeqCst);
       }
       // An error page loads after its navigation failed, and the failure stands.
       "browsingContext.load" if self.main(params) => self.loaded(),
@@ -743,19 +756,21 @@ impl FirefoxRunning {
     self.launch.traffic.as_ref().expect("a running Firefox holds what it watches")
   }
 
-  // Asks the tab a few times a second, once the navigation's document has committed, whether the document
-  // standing in it has loaded, and records one that has as its load would be. A page whose script sends its tab
-  // back through its history before the page has loaded leaves Firefox firing no load for the tab at all.
+  // Looks a few times a second for a navigation that has as good as loaded without its load event, and records
+  // it as its load would be: a page whose content has stood loaded long enough while a request of it holds the
+  // load back, and, once the navigation's document has committed, a document in the tab that says it has
+  // loaded, since a page whose script sends its tab back through its history leaves Firefox firing no load.
   async fn loaded_in_tab(&self) {
     let traffic = self.traffic();
 
     loop {
       tokio::time::sleep(std::time::Duration::from_millis(TAB_LOOK_MS)).await;
 
-      if traffic.committed.load(Ordering::SeqCst)
-        && let Ok(state) = self.evaluate("document.readyState").await
-        && state == "complete"
-      {
+      let loaded = read_without_load(traffic.content_loaded(), now_ms())
+        || (traffic.committed.load(Ordering::SeqCst)
+          && self.evaluate("document.readyState").await.is_ok_and(|state| state == "complete"));
+
+      if loaded {
         traffic.loaded();
         return;
       }
@@ -775,6 +790,9 @@ impl Running for FirefoxRunning {
       let page = &traffic.page;
       let mut events = self.connection().events.subscribe();
 
+      // Nothing the page before it showed ends this navigation's wait.
+      traffic.committed.store(false, Ordering::SeqCst);
+      traffic.content_loaded_ms.store(0, Ordering::SeqCst);
       traffic.load.send_replace(Load::Loading);
 
       let mut load = traffic.load.subscribe();

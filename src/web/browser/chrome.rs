@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use base64::Engine;
@@ -15,7 +15,7 @@ use tokio::process::{Child, Command};
 
 use super::{
   Answer, Gesture, PageWatch, Product, Running, UrlGuard, accepts_dialog, display, fails_the_page, is_web,
-  locked, navigation_failure, places, profile, proxy, remote,
+  locked, navigation_failure, places, profile, proxy, read_without_load, remote,
 };
 use crate::web::clock::now_ms;
 use crate::web::error::{Failure, WebError, WebResult};
@@ -75,9 +75,16 @@ struct Lifecycle {
   document: std::sync::Mutex<Option<String>>,
   idle: std::sync::Mutex<Option<String>>,
   scheduled: AtomicBool,
+  // When the main frame's document standing there loaded its content, 0 until it has.
+  content_loaded_ms: AtomicU64,
 }
 
 impl Lifecycle {
+  // When the main frame's document loaded its content, where it has.
+  fn content_loaded(&self) -> Option<u64> {
+    Some(self.content_loaded_ms.load(Ordering::SeqCst)).filter(|at| *at > 0)
+  }
+
   // Whether the main frame's document has come to rest: Chrome's network-idle mark given for the document
   // standing there, and no navigation scheduled from it.
   fn rested(&self) -> bool {
@@ -102,6 +109,10 @@ impl Lifecycle {
         *locked(&self.document) = loader;
         *locked(&self.idle) = None;
         self.scheduled.store(false, Ordering::SeqCst);
+        self.content_loaded_ms.store(0, Ordering::SeqCst);
+      }
+      ("Page.lifecycleEvent", Some("DOMContentLoaded")) if loader == *locked(&self.document) => {
+        self.content_loaded_ms.store(now_ms(), Ordering::SeqCst);
       }
       ("Page.lifecycleEvent", Some("networkIdle")) => *locked(&self.idle) = loader,
       ("Page.frameScheduledNavigation", _) => self.scheduled.store(true, Ordering::SeqCst),
@@ -120,6 +131,20 @@ struct ChromeRunning {
   connection: remote::Connection,
   watch: Arc<Lifecycle>,
   _place: places::Place,
+}
+
+// How often a navigation's wait looks whether its page's content has stood loaded long enough to be read
+// without its load event.
+const CONTENT_LOOK_MS: u64 = 250;
+
+impl ChromeRunning {
+  // Ends once the main frame's document has loaded its content and stood loaded long enough to be read without
+  // its load event, as a page whose request holds the load back is read.
+  async fn content_long_loaded(&self) {
+    while !read_without_load(self.watch.content_loaded(), now_ms()) {
+      tokio::time::sleep(std::time::Duration::from_millis(CONTENT_LOOK_MS)).await;
+    }
+  }
 }
 
 // A started browser, its page's DevTools connection and what it watches on the page.
@@ -433,6 +458,10 @@ impl Running for ChromeRunning {
       let sender = &self.connection.sender;
       let page = &self.watch.page;
       let mut events = self.connection.events.subscribe();
+
+      // Nothing the page before it showed ends this navigation's wait.
+      self.watch.content_loaded_ms.store(0, Ordering::SeqCst);
+
       let navigated = tokio::select! {
         answer = sender.command("Page.navigate", json!({ "url": url })) => answer?,
         () = page.blocked_now.notified() => return Err(page.refusal(url)),
@@ -445,6 +474,7 @@ impl Running for ChromeRunning {
       tokio::select! {
         loaded = remote::event(&mut events, "Page.loadEventFired") => { loaded?; }
         () = page.blocked_now.notified() => {}
+        () = self.content_long_loaded() => {}
       }
 
       Ok(())
