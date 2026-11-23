@@ -29,8 +29,13 @@ fn rendered() -> BrowserDocument {
 }
 
 fn client(web: Web) -> (Explorer, Arc<Web>, Arc<FakeBrowser>) {
+  client_drawing(web, rendered())
+}
+
+// A client whose stand-in browser draws `document` at every address.
+fn client_drawing(web: Web, document: BrowserDocument) -> (Explorer, Arc<Web>, Arc<FakeBrowser>) {
   let web = Arc::new(web);
-  let browser = FakeBrowser::new(rendered());
+  let browser = FakeBrowser::new(document);
   let made: Arc<dyn BrowserFetcher> = browser.clone();
   let client = Explorer::over(WebSession::new(SessionParts {
     store: Arc::new(MemoryPacing::default()),
@@ -80,6 +85,26 @@ async fn a_page_that_blocks_a_plain_request_is_read_as_chrome_drew_it() {
   assert_eq!(page.title.as_deref(), Some("Item"));
   assert!(page.text.contains("drawn by script"), "{}", page.text);
   assert_eq!(page.links, ["https://shop.test/cart"]);
+}
+
+#[tokio::test]
+async fn a_drawn_page_whose_head_outruns_the_text_limit_is_still_read_for_its_body() {
+  let head = format!("<script>{}</script>", "x".repeat(120_000));
+  let document = BrowserDocument {
+    html: format!(
+      "<html><head><title>Item</title>{head}</head><body><p>drawn by script</p><a href=\"/cart\">Cart</a></body></html>"
+    ),
+    ..rendered()
+  };
+  let (client, ..) = client_drawing(
+    Web::default().route("shop.test", |_| answer(403, &[("content-type", "text/html")], b"<p>denied</p>")),
+    document,
+  );
+  let page = client.web_fetch("https://shop.test/item").await.unwrap();
+
+  assert!(page.text.contains("drawn by script"), "{}", page.text);
+  assert_eq!(page.links, ["https://shop.test/cart"]);
+  assert!(!page.truncated);
 }
 
 #[tokio::test]

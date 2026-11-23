@@ -500,6 +500,11 @@
 
 - **Ordinary content:** when the browser produces the ordinary body behind JavaScript, it is returned in
   the same character-slicing format, with the final URL, content type and `browser` provenance.
+- **The page is read whole and sliced last:** the document the browser drew, as the snapshot that holds
+  still takes it, is classified, reduced to text and read for its links as one whole, as the direct road's
+  markup is; the slice an agent asked for is cut from that result. A reader that wants the page's words
+  rather than one slice of them, such as the client's page read (docs/api.md, 「The MCP server」), is
+  handed the whole page, never the first slice of its markup.
 - **Still blocked:** if an HTTP refusal or a challenge/CAPTCHA remains in the browser too, `blocked` is
   returned. Where the read worked the challenge (「When the browser meets a challenge」), the refusal carries
   the loop's account: its rounds, what each acting round did, and where it stopped.

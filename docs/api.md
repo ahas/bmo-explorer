@@ -102,6 +102,12 @@ flowchart TD
   server has none. The `web_captcha` tool's forcing read — the page opened in the browser from the start, the
   loop's account named in the answer — has no MCP form: a harness reads pages through this tool and meets the
   loop on the way.
+- **`explorer_web_fetch` reads the whole page before it cuts anything:** its title, text and links are read
+  off the whole of what the road brought back, the markup the direct client received or the document the
+  browser drew, and only the text is then cut at 100,000 characters. A page whose head alone runs past that
+  length, as a shop's or a script-drawn site's often does, is still answered with its body's words and
+  links. `truncated` is true where the text was cut, or where the road itself stopped short of the whole
+  page at its own limit.
 - **`explorer_link_preview` and `explorer_fetch_page` read the page directly,** checking the address and each
   redirect, at most 512 KiB of it, paced 250 ms apart per host.
 - **`explorer_link_preview` reads as a link previewer** (docs/web-access.md, 「Identities and headers」), so a

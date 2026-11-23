@@ -1,6 +1,7 @@
 //! One investigation's web reading (docs/web-access.md, 「One session, one investigation」): the direct
 //! client's cookie jar, the pacing every request takes, and the real browser a page falls back to, kept for
-//! the session and ended with it. A page comes back sliced, with where the rest starts.
+//! the session and ended with it. A page is read whole, and the slice an agent asks for, with where the rest
+//! starts, is cut from it last.
 
 use std::sync::Arc;
 
@@ -96,6 +97,34 @@ pub struct FetchPage {
   pub browser_first: bool,
   /// Read a PDF in its layout rather than in reading order.
   pub pdf_layout: bool,
+}
+
+/// A page as a road brought it back, whole: the slice an agent asks for is cut from it last.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PageRead {
+  /// The address the read ended at.
+  pub url: String,
+  pub content_type: String,
+  pub status: u16,
+  /// `direct` or `browser`.
+  pub provenance: &'static str,
+  /// Whether the road stopped short of the whole page at its own limit.
+  pub source_truncated: bool,
+  pub text: String,
+}
+
+impl PageRead {
+  /// The part of the page `options` ask for, at the default length where they name none.
+  pub fn slice(&self, options: &FetchPage) -> FetchSlice {
+    slice_content(
+      &self.url,
+      &self.content_type,
+      &self.text,
+      options.offset.unwrap_or(0),
+      options.max_chars.unwrap_or(DEFAULT_FETCH_CHARS),
+    )
+    .read_as(self.status, self.provenance, self.source_truncated)
+  }
 }
 
 /// What a session reads with.
@@ -210,18 +239,23 @@ impl WebSession {
     direct
   }
 
-  /// One page as the fetch tool reads it: the direct client first, the real browser after a block where
-  /// that is allowed, a PDF as its text.
+  /// One page as the fetch tool reads it, sliced as `options` ask (docs/web-access.md, 「What the browser
+  /// returns」).
   pub async fn fetch_page(&self, url: &str, options: &FetchPage) -> WebResult<FetchSlice> {
+    self.read_page(url, options).await.map(|read| read.slice(options))
+  }
+
+  /// One page read whole: the direct client first, the real browser after a block where that is allowed, a
+  /// PDF as its text. `options` say how it is read; their offset and length are the slice's alone.
+  pub async fn read_page(&self, url: &str, options: &FetchPage) -> WebResult<PageRead> {
     let target = raw_url_for(url);
     let clock = &self.parts.check.clock;
-    let max_chars = options.max_chars.unwrap_or(DEFAULT_FETCH_CHARS);
 
     if options.browser_first && options.browser_fallback {
       self.parts.check.resolve(&web_url(&target)?).await?;
       self.wait_for_page_host(&target).await?;
 
-      return Box::pin(self.rendered(&target, options, None)).await.map(|(slice, _)| slice);
+      return Box::pin(self.rendered(&target, options, None)).await.map(|(read, _)| read);
     }
 
     let fetched = self.direct().bytes(&target).await?;
@@ -231,7 +265,7 @@ impl WebSession {
       && !fetched.bytes.is_empty()
       && is_pdf(&fetched.content_type, &fetched.bytes)
     {
-      return self.pdf_slice(&fetched, options).await;
+      return self.pdf_read(&fetched, options).await;
     }
 
     let body = decode(&fetched.bytes, &fetched.raw_content_type);
@@ -258,25 +292,27 @@ impl WebSession {
           classified.reason.unwrap_or_default()
         );
 
-        return Ok(slice_content(&fetched.url, &content_type("text/plain"), &said, 0, max_chars).read_as(
-          fetched.status,
-          "direct",
-          false,
-        ));
+        return Ok(PageRead {
+          url: fetched.url,
+          content_type: content_type("text/plain"),
+          status: fetched.status,
+          provenance: "direct",
+          source_truncated: false,
+          text: said,
+        });
       }
       Disposition::Content => {
+        let content_type = content_type(if classified.is_html { "text/html" } else { "text/plain" });
         let text = if classified.is_html && !options.raw { classified.text } else { body };
 
-        return Ok(
-          slice_content(
-            &fetched.url,
-            &content_type(if classified.is_html { "text/html" } else { "text/plain" }),
-            &text,
-            options.offset.unwrap_or(0),
-            max_chars,
-          )
-          .read_as(fetched.status, "direct", fetched.truncated),
-        );
+        return Ok(PageRead {
+          url: fetched.url,
+          content_type,
+          status: fetched.status,
+          provenance: "direct",
+          source_truncated: fetched.truncated,
+          text,
+        });
       }
       Disposition::HttpError => {
         let message = format!("{} {}", classified.reason.unwrap_or_default(), fetched.status_text)
@@ -321,7 +357,7 @@ impl WebSession {
     // both roads were tried.
     Box::pin(self.rendered(&target, options, Some((reason, fetched.status))))
       .await
-      .map(|(slice, _)| slice)
+      .map(|(read, _)| read)
       .map_err(WebError::after_chrome)
   }
 
@@ -351,9 +387,12 @@ impl WebSession {
     self.parts.check.resolve(&web_url(&target)?).await?;
     self.wait_for_page_host(&target).await?;
 
-    let (slice, challenge) = Box::pin(self.rendered(&target, options, None)).await?;
+    let (read, challenge) = Box::pin(self.rendered(&target, options, None)).await?;
 
-    Ok(CaptchaRead { slice, challenge })
+    Ok(CaptchaRead {
+      slice: read.slice(options),
+      challenge,
+    })
   }
 
   // The page as the real browser renders it: after a classified direct block, or first of all under the
@@ -365,7 +404,7 @@ impl WebSession {
     url: &str,
     options: &FetchPage,
     direct: Option<(String, u16)>,
-  ) -> WebResult<(FetchSlice, ChallengeMark)> {
+  ) -> WebResult<(PageRead, ChallengeMark)> {
     let asking = FetchOptions {
       solve_challenge: true,
       pace: Some(self.page_pace()),
@@ -409,9 +448,9 @@ impl WebSession {
         ..options.clone()
       };
 
-      return Box::pin(self.fetch_page(url, &again))
+      return Box::pin(self.read_page(url, &again))
         .await
-        .map(|slice| (slice, ChallengeMark::NotAttempted));
+        .map(|read| (read, ChallengeMark::NotAttempted));
     }
 
     let classified = classify(&Fetched {
@@ -454,19 +493,19 @@ impl WebSession {
     };
 
     Ok((
-      slice_content(
-        &rendered.url,
-        &content_type,
-        &text,
-        options.offset.unwrap_or(0),
-        options.max_chars.unwrap_or(DEFAULT_FETCH_CHARS),
-      )
-      .read_as(rendered.status, "browser", rendered.truncated),
+      PageRead {
+        url: rendered.url,
+        content_type,
+        status: rendered.status,
+        provenance: "browser",
+        source_truncated: rendered.truncated,
+        text,
+      },
       rendered.challenge,
     ))
   }
 
-  async fn pdf_slice(&self, fetched: &DirectBytes, options: &FetchPage) -> WebResult<FetchSlice> {
+  async fn pdf_read(&self, fetched: &DirectBytes, options: &FetchPage) -> WebResult<PageRead> {
     let text = pdf_text(&fetched.bytes, &fetched.url, fetched.truncated, options.pdf_layout).await?;
     let content_type = if fetched.content_type.is_empty() {
       "application/pdf"
@@ -474,16 +513,14 @@ impl WebSession {
       fetched.content_type.as_str()
     };
 
-    Ok(
-      slice_content(
-        &fetched.url,
-        content_type,
-        &text,
-        options.offset.unwrap_or(0),
-        options.max_chars.unwrap_or(DEFAULT_FETCH_CHARS),
-      )
-      .read_as(fetched.status, "direct", fetched.truncated),
-    )
+    Ok(PageRead {
+      url: fetched.url.clone(),
+      content_type: content_type.to_owned(),
+      status: fetched.status,
+      provenance: "direct",
+      source_truncated: fetched.truncated,
+      text,
+    })
   }
 
   /// The session's cookies dropped and the browser it made ended.

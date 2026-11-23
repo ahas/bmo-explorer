@@ -439,14 +439,14 @@ impl Explorer {
     })
   }
 
-  /// One page read as words: the direct client first, the real browser after a block, a PDF as its text.
+  /// One page read as words: the direct client first, the real browser after a block, a PDF as its text; the
+  /// whole page is read before its text is cut (docs/api.md, 「The MCP server」).
   pub async fn web_fetch(&self, url: &str) -> Result<PageText, ClientError> {
     let read = self
       .session
-      .fetch_page(
+      .read_page(
         url,
         &FetchPage {
-          max_chars: Some(usize::MAX),
           raw: true,
           browser_fallback: true,
           ..FetchPage::default()
