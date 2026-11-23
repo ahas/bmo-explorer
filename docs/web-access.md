@@ -216,20 +216,18 @@
 
 ### Which browser
 
-- **The owner's own Firefox profile, where this machine has one.** The owner ordered on 2026-11-17 that the
-  web tools' browser use the profile he uses himself, with his cookies and sign-ins, so a site sees an
-  ordinary signed-in person rather than a fresh browser it takes for a bot. So where Firefox and its
-  default profile stand on the machine, every browser read runs Firefox on a copy of that profile.
+- **The owner's own Firefox profile, and only it, where this machine has one.** The owner ordered on
+  2026-11-17 that the web tools' browser use the profile he uses himself, with his cookies and sign-ins, so
+  a site sees an ordinary signed-in person rather than a fresh browser it takes for a bot, and on 2026-11-23
+  that pages open with his profile alone. So where Firefox and its default profile stand on the machine,
+  every browser read runs Firefox on a copy of that profile, and no other browser reads a page there.
   - Firefox is `/snap/bin/firefox` and its profiles' folder `snap/firefox/common/.mozilla/firefox` under the
     home folder; `BMO_FIREFOX_PATH` and `BMO_FIREFOX_PROFILES` name others, and an empty
     `BMO_FIREFOX_PROFILES` names none. The profile is the one the folder's `profiles.ini` makes Firefox open
     by default.
-- **Chrome after a refusal of Firefox:** a site that refuses the owner's Firefox outright — the page it
-  answers with `403`, `418`, `420` or `429` — or a Firefox that cannot be started has the page read once
-  more in Chrome on a temporary profile, after the host's own pacing interval, and Chrome's page is taken
-  where that site did not refuse it too. Some sites' edges refuse a remote-controlled Firefox at its first
-  request whatever its profile, and let the same machine's Chrome through; the owner's profile is for
-  being let in, and the fallback keeps every page Chrome alone was let into before.
+- **Nothing after a refusal of Firefox:** where his profile stands, a page the site refuses to his Firefox
+  is answered as that refusal, and a Firefox that cannot be started fails the read as it is. Chrome is
+  never started on such a machine, on a temporary profile or any other.
 - **Chrome on a fresh temporary profile everywhere else:** a machine with no such Firefox profile, another
   node among them, reads with standard Chrome on a profile made for it and deleted after it.
 - **The owner's profile is only ever read.** It is copied file by file into a new folder at each start, and
@@ -262,6 +260,10 @@
   - An address that turns into a download fails the read, saying so: a browser shows no page for it.
   - A snap's Firefox is started in a user scope of the snap's own name made through the user's service
     manager, since its launcher would otherwise ask the session bus for one; the bus is cut only inside it.
+    The manager is reached at the runtime folder of the user this process runs as, `/run/user/<uid>`, and
+    the bus there, named to the scope's request alone. Nothing of the caller's session is needed for it: an
+    agent's harness starts the MCP server with no runtime folder or bus address of its own, and its reads
+    start Firefox all the same.
   - Firefox's remote agent is told not to lay its recommended automation preferences over the profile's,
     so the copy behaves as the owner's own Firefox does.
   - **`navigator.webdriver` is hidden:** a script run in every page before the page's own scripts makes
@@ -329,8 +331,10 @@
   as unavailable.
 - **A start waits for what it started.** Its private display is waited for until the display names its
   number or ends, Chrome until its DevTools endpoint answers or Chrome exits, and Firefox until it
-  announces its WebDriver BiDi endpoint or ends. On a loaded machine a fresh display and browser can stand
-  silent for seconds before they answer, where an idle machine answers in about half a second.
+  announces its WebDriver BiDi endpoint or ends. A Firefox that ends first fails the start with the last
+  line it or its launcher wrote, so the failure names its cause. On a loaded machine a fresh display and
+  browser can stand silent for seconds before they answer, where an idle machine answers in about half a
+  second.
 - **An idle browser ends.** A browser no read has used or waited for in three minutes is ended as at the
   end below and gives its place back; the next page in that session starts a fresh one, with fresh cookies
   (on Firefox, a fresh copy of the owner's profile). A record stands as long as its session — a resident
@@ -373,6 +377,18 @@
   - A navigation the site replaces before its page has loaded — a redirect of its own, or a script check
     that moves on to the next address while the first page is still loading — is waited on through the
     one that took its place. Only a navigation that fails before its document has arrived fails the read.
+  - A page whose script sends its tab back through its history before the page has loaded leaves Firefox
+    firing no load for that tab at all. So once the navigation's document has committed, Firefox's wait
+    also asks the tab, a few times a second, whether the document standing in it has loaded, and one that
+    has ends the wait as its load event would.
+- **A dialog a page opens is answered at once,** in every browser: an alert, a confirm and a prompt are
+  dismissed, as a person closes one without agreeing to anything, and a question before the page unloads is
+  accepted, so the navigation the read asked for goes on. A dialog left standing holds the page's scripts
+  and the browser's answers to the read, and the read would never end; a sold-out product page that
+  announces itself with an alert is one such page.
+  - The words the page's last dialog said are kept for the read. A page that leaves its tab for no web page
+    at all, as such a sold-out page sends its tab back to an empty one, fails the read with a line saying
+    so and those words, rather than as an address this layer refused.
 - **The page is read once it holds still:** two snapshots taken 150 ms apart that agree, or the snapshot
   standing two seconds after the load. A page that keeps changing its own text — a clock, a ticker — never
   agrees with itself, and the two seconds say when its snapshot is taken; they never fail the read. A

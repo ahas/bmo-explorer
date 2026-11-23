@@ -1,10 +1,10 @@
 //! The real browser a read falls back to (docs/web-access.md, 「Direct collection and the real browser」): Firefox
-//! on a copy of the owner's own profile where this machine has one, standard Chrome on a fresh temporary profile
-//! everywhere else, each non-headless on a private display of its own, every request it makes sent through a
-//! proxy that connects only to an address the caller's check has just passed, and every request a page makes
-//! paused and checked the same way before the browser sends it. One navigation at a time, each waited for until
-//! its page has loaded or the browser has gone; a browser no read has used for three minutes ends and gives its
-//! machine place back.
+//! on a copy of the owner's own profile, and no other browser, where this machine has one, standard Chrome on a
+//! fresh temporary profile everywhere else, each non-headless on a private display of its own, every request it
+//! makes sent through a proxy that connects only to an address the caller's check has just passed, and every
+//! request a page makes paused and checked the same way before the browser sends it. One navigation at a time,
+//! each waited for until its page has loaded or the browser has gone; a browser no read has used for three
+//! minutes ends and gives its machine place back.
 //!
 //! What the two browsers share — the queue, the idle end, the watch for a page's arrival and the snapshot of a
 //! page that holds still — stands here; each product answers how it is started and how its page is driven.
@@ -128,71 +128,22 @@ pub trait BrowserFetcher: Send + Sync {
   fn close(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>>;
 }
 
+/// Whether a dialog a page opened is accepted (docs/web-access.md, 「Lifetime and cleanup」), by the kind both
+/// browsers' protocols name it with: a question before the page unloads is, so the read's navigation goes on;
+/// an alert, a confirm and a prompt are dismissed, as a person closes one without agreeing to anything.
+pub fn accepts_dialog(kind: &str) -> bool {
+  kind == "beforeunload"
+}
+
 /// What a read waits for before a browser opens a page of a host: the host's turn in its pacing queue.
 pub type Pace = Arc<dyn Fn(String) -> Pin<Box<dyn Future<Output = WebResult<()>> + Send>> + Send + Sync>;
 
-/// This machine's browser (docs/web-access.md, 「Which browser」): Firefox on a copy of the owner's profile where
-/// the machine has one, with Chrome on a temporary profile after a refusal of it; Chrome alone otherwise.
-pub fn on_this_machine(guard: UrlGuard, pace: Pace) -> Arc<dyn BrowserFetcher> {
-  let chrome = Arc::new(Browser::new(guard.clone(), Box::new(chrome::Chrome::installed())));
-
+/// This machine's browser (docs/web-access.md, 「Which browser」): Firefox on a copy of the owner's profile, and
+/// no other, where the machine has one; Chrome on a temporary profile otherwise.
+pub fn on_this_machine(guard: UrlGuard) -> Arc<dyn BrowserFetcher> {
   match firefox::Firefox::on_this_machine() {
-    Some(firefox) => {
-      Arc::new(Fallback::new(Arc::new(Browser::new(guard, Box::new(firefox))), chrome, pace))
-    }
-    None => chrome,
-  }
-}
-
-/// Whether a page's status is its site's outright refusal of the browser.
-pub fn refused(status: u16) -> bool {
-  matches!(status, 403 | 418 | 420 | 429)
-}
-
-/// One browser read first and another after it, where the site refused the first outright or the first could
-/// not be started: the second's page is taken where its site did not refuse it too, and the first's answer
-/// otherwise. The second read waits for the host's pacing first, as every top-level navigation does.
-pub struct Fallback {
-  first: Arc<dyn BrowserFetcher>,
-  then: Arc<dyn BrowserFetcher>,
-  pace: Pace,
-}
-
-impl Fallback {
-  pub fn new(first: Arc<dyn BrowserFetcher>, then: Arc<dyn BrowserFetcher>, pace: Pace) -> Self {
-    Self { first, then, pace }
-  }
-}
-
-impl BrowserFetcher for Fallback {
-  fn fetch(
-    &self,
-    url: String,
-    options: FetchOptions,
-  ) -> Pin<Box<dyn Future<Output = WebResult<BrowserDocument>> + Send + '_>> {
-    Box::pin(async move {
-      let read = self.first.fetch(url.clone(), options.clone()).await;
-      let turned_away = match &read {
-        Ok(page) => refused(page.status),
-        Err(error) => error.kind == Failure::BrowserUnavailable,
-      };
-
-      if !turned_away || (self.pace)(url.clone()).await.is_err() {
-        return read;
-      }
-
-      match self.then.fetch(url, options).await {
-        Ok(page) if !refused(page.status) => Ok(page),
-        _ => read,
-      }
-    })
-  }
-
-  fn close(&self) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
-    Box::pin(async move {
-      self.first.close().await;
-      self.then.close().await;
-    })
+    Some(firefox) => Arc::new(Browser::new(guard, Box::new(firefox))),
+    None => Arc::new(Browser::new(guard, Box::new(chrome::Chrome::installed()))),
   }
 }
 
@@ -322,15 +273,21 @@ pub struct DocumentResponse {
 }
 
 /// What a page's events have shown of the navigation under way, whichever browser shows it: its document's
-/// answer and a refusal of the guard's.
+/// answer, a refusal of the guard's and the words its last dialog said.
 #[derive(Default)]
 pub struct PageWatch {
   pub response: Mutex<Option<DocumentResponse>>,
   pub blocked: Mutex<Option<WebError>>,
   pub blocked_now: tokio::sync::Notify,
+  pub dialog: Mutex<Option<String>>,
 }
 
 impl PageWatch {
+  /// A dialog the page opened, its words kept for the read.
+  pub fn dialog_opened(&self, message: Option<&str>) {
+    *locked(&self.dialog) = message.map(str::to_owned).filter(|said| !said.trim().is_empty());
+  }
+
   /// The guard's refusal recorded for the navigation under way.
   pub fn blocked(&self) -> Option<WebError> {
     locked(&self.blocked).clone()
@@ -346,6 +303,18 @@ impl PageWatch {
 
 fn locked<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
   mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+/// What a read says of a page that left its tab for `landed`, no web page at all, after it was asked for at
+/// `url`: that it did, and the words its last dialog said where it opened one.
+pub fn left_the_web(url: &str, landed: &str, dialog: Option<&str>) -> WebError {
+  let said = dialog.map(|said| format!("; its dialog said: {said}")).unwrap_or_default();
+
+  WebError::new(
+    format!("The page at {url} left its tab for {landed} before it could be read{said}"),
+    Failure::Http,
+  )
+  .with_url(url)
 }
 
 /// Whether a request's address is a web address the guard checks; every other scheme passes as the page's own.
@@ -524,6 +493,7 @@ impl Browser {
 
     *locked(&watch.response) = None;
     *locked(&watch.blocked) = None;
+    *locked(&watch.dialog) = None;
 
     running.open(url).await?;
 
@@ -584,6 +554,21 @@ impl Browser {
     Ok(document)
   }
 
+  // Where the read asked for at `url` came to: a page that left its tab for no web page fails the read saying
+  // so, and a web page is checked by the guard as every address is.
+  async fn check_landing(
+    &self,
+    running: &dyn Running,
+    url: &str,
+    document: &BrowserDocument,
+  ) -> WebResult<()> {
+    if !is_web(&document.url) {
+      return Err(left_the_web(url, &document.url, locked(&running.watch().dialog).as_deref()));
+    }
+
+    (self.inner.guard)(document.url.clone()).await.map(|_| ())
+  }
+
   async fn navigate(
     &self,
     running: &dyn Running,
@@ -593,7 +578,7 @@ impl Browser {
     (self.inner.guard)(url.to_owned()).await?;
     let mut document = self.read_opened(running, url, options).await?;
 
-    (self.inner.guard)(document.url.clone()).await?;
+    self.check_landing(running, url, &document).await?;
 
     // The reasoning loop at a challenge met in the page — rounds until the stage ends, the site ends it, or
     // the bounds are spent — then the address opened once more: the read's one retry, after the host's turn
@@ -609,7 +594,7 @@ impl Browser {
       }
 
       document = self.read_opened(running, url, options).await?;
-      (self.inner.guard)(document.url.clone()).await?;
+      self.check_landing(running, url, &document).await?;
       document.challenge = if stands_a_challenge(&document, url) {
         ChallengeMark::Remains(tried)
       } else {

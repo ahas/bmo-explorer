@@ -183,7 +183,7 @@ impl WebSession {
   fn own_browser(&self) -> Arc<dyn BrowserFetcher> {
     match &self.parts.browsers {
       Some(make) => make(self.guard()),
-      None => crate::web::browser::on_this_machine(self.guard(), self.page_pace()),
+      None => crate::web::browser::on_this_machine(self.guard()),
     }
   }
 

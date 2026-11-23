@@ -26,11 +26,21 @@ fn firefox_is_launched_off_every_persons_session_on_the_copy_alone() {
   };
   let environment =
     launch_environment(person, ":9", &copy.join("display/Xauthority"), &copy.join("display/runtime"), copy);
-  let line = launch_line("/snap/bin/firefox", "snap.firefox.firefox", "1", &environment, copy);
-  let set: Vec<&str> = line.iter().map(String::as_str).filter(|part| part.contains('=')).collect();
+  let runtime = Path::new("/run/user/1000");
+  let line = launch_line("/snap/bin/firefox", "snap.firefox.firefox", "1", runtime, &environment, copy);
+  let set: Vec<&str> = line[10..].iter().map(String::as_str).filter(|part| part.contains('=')).collect();
 
+  // The scope is asked of the user's own service manager, whatever the caller's session holds.
   assert_eq!(
-    &line[..7],
+    &line[..3],
+    [
+      "env",
+      "XDG_RUNTIME_DIR=/run/user/1000",
+      "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus"
+    ]
+  );
+  assert_eq!(
+    &line[3..10],
     [
       "systemd-run",
       "--user",
@@ -41,7 +51,7 @@ fn firefox_is_launched_off_every_persons_session_on_the_copy_alone() {
       "--"
     ]
   );
-  assert_eq!(&line[7..9], ["env", "-i"]);
+  assert_eq!(&line[10..12], ["env", "-i"]);
   assert!(set.contains(&"DISPLAY=:9"));
   assert!(set.contains(&"DBUS_SESSION_BUS_ADDRESS=unix:path=/srv/profiles/.bmo-web-firefox-1/no-bus"));
   assert!(set.contains(&"DISABLE_WAYLAND=1"));
@@ -57,7 +67,23 @@ fn firefox_is_launched_off_every_persons_session_on_the_copy_alone() {
       "about:blank"
     ]
   );
-  assert_eq!(launch_line("/usr/bin/firefox", "", "1", &environment, copy)[..2], ["env", "-i"]);
+  assert_eq!(
+    launch_line("/usr/bin/firefox", "", "1", runtime, &environment, copy)[..2],
+    ["env", "-i"]
+  );
+}
+
+#[test]
+fn a_firefox_that_ends_before_it_listens_is_failed_with_the_last_line_written() {
+  assert_eq!(
+    ended_before_listening("Failed to connect to bus: No medium found"),
+    "Firefox ended before it listened: Failed to connect to bus: No medium found"
+  );
+  assert_eq!(ended_before_listening(""), "Firefox ended before it listened");
+  assert_eq!(
+    ended_before_listening(&"x".repeat(1_000)).len(),
+    "Firefox ended before it listened: ".len() + 300
+  );
 }
 
 #[test]

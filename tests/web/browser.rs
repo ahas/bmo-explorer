@@ -1,8 +1,8 @@
-use super::testing::FakeBrowser;
 use bmo_explorer::web::browser::*;
 use bmo_explorer::web::clock::{Clock, StandingClock};
 use bmo_explorer::web::error::Failure;
 use bmo_explorer::web::error::WebError;
+use serde_json::json;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
@@ -116,41 +116,38 @@ async fn the_address_is_watched_until_the_page_has_arrived_or_has_come_to_rest()
   assert!(await_arrival(arriving, &arrived, || clock.now() >= rested_at, &*clock).await);
 }
 
-// A site that refuses the first browser outright has its page read in the second, after the host's pacing;
-// a page the first was let into, or one both were refused, stays the first's.
-#[tokio::test]
-async fn a_page_refused_to_the_first_browser_is_read_in_the_second_after_the_hosts_pacing() {
-  let page = |status: u16, title: &str| BrowserDocument {
-    status,
-    title: title.to_owned(),
-    ..BrowserDocument::default()
-  };
-  let paced = Arc::new(AtomicUsize::new(0));
-  let pace: Pace = {
-    let paced = paced.clone();
+// A dialog a page opens is answered at once in either browser, or the read would never end: an alert, a confirm
+// and a prompt dismissed, a question before the page unloads accepted so the read's navigation goes on.
+#[test]
+fn a_dialog_a_page_opens_is_dismissed_and_a_question_before_unloading_accepted() {
+  for (kind, accept) in [("alert", false), ("confirm", false), ("prompt", false), ("beforeunload", true)] {
+    assert_eq!(
+      chrome::dialog_answer(&json!({ "type": kind, "message": "Sold out" })),
+      json!({ "accept": accept })
+    );
+    assert_eq!(
+      firefox::prompt_answer(&json!({ "context": "tab", "type": kind, "message": "Sold out" })),
+      json!({ "context": "tab", "accept": accept })
+    );
+  }
+}
 
-    Arc::new(move |_| {
-      paced.fetch_add(1, Ordering::SeqCst);
-      Box::pin(async { Ok(()) })
-    })
-  };
-  let read = async |first: u16, then: u16| {
-    let (one, two) = (FakeBrowser::new(page(first, "first")), FakeBrowser::new(page(then, "then")));
-    let browser = Fallback::new(one.clone(), two.clone(), pace.clone());
-    let title = browser
-      .fetch("https://site.example/".into(), FetchOptions::default())
-      .await
-      .unwrap()
-      .title;
+// A page that leaves its tab for no web page at all, as a sold-out page sends its tab back to an empty one after
+// its alert, fails the read saying so with the dialog's words, never as an address the guard refused.
+#[test]
+fn a_page_that_leaves_its_tab_for_no_web_page_fails_the_read_with_its_dialogs_words() {
+  let left =
+    left_the_web("https://shop.example/item/1", "about:blank", Some("This item is no longer sold."));
 
-    browser.close().await;
-    assert!(one.closed() && two.closed());
-    (title, two.calls())
-  };
-
-  assert_eq!(read(403, 200).await, ("then".to_owned(), 1));
-  assert_eq!(paced.load(Ordering::SeqCst), 1);
-  assert_eq!(read(200, 200).await, ("first".to_owned(), 0));
-  assert_eq!(read(429, 403).await, ("first".to_owned(), 1));
-  assert!(refused(418) && refused(420) && !refused(404) && !refused(503));
+  assert_eq!(left.kind, Failure::Http);
+  assert_eq!(
+    left.message,
+    "The page at https://shop.example/item/1 left its tab for about:blank before it could be read; its dialog \
+     said: This item is no longer sold."
+  );
+  assert!(
+    !left_the_web("https://shop.example/item/1", "about:blank", None)
+      .message
+      .contains("dialog")
+  );
 }

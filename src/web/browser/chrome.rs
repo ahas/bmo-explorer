@@ -14,11 +14,17 @@ use serde_json::{Value, json};
 use tokio::process::{Child, Command};
 
 use super::{
-  Answer, Gesture, PageWatch, Product, Running, UrlGuard, display, fails_the_page, is_web, locked,
-  navigation_failure, places, profile, proxy, remote,
+  Answer, Gesture, PageWatch, Product, Running, UrlGuard, accepts_dialog, display, fails_the_page, is_web,
+  locked, navigation_failure, places, profile, proxy, remote,
 };
 use crate::web::clock::now_ms;
 use crate::web::error::{Failure, WebError, WebResult};
+
+/// The answer to a dialog a page opened, as `Page.handleJavaScriptDialog` takes it: accepted or dismissed as
+/// `accepts_dialog` says of the kind the opening event names.
+pub fn dialog_answer(opening: &Value) -> Value {
+  json!({ "accept": accepts_dialog(opening["type"].as_str().unwrap_or_default()) })
+}
 
 /// The arguments Chrome is started with on its private display.
 pub fn launch_arguments(chrome: &str, profile: &Path, port: u16, proxy_port: u16) -> Vec<String> {
@@ -317,6 +323,11 @@ impl Chrome {
       }
       "Page.lifecycleEvent" | "Page.frameScheduledNavigation" | "Page.frameClearedScheduledNavigation" => {
         handler_watch.observe(method, params);
+      }
+      // A dialog left standing holds the page's scripts and every answer to the read.
+      "Page.javascriptDialogOpening" => {
+        handler_watch.page.dialog_opened(params["message"].as_str());
+        sender.tell("Page.handleJavaScriptDialog", dialog_answer(params));
       }
       "Fetch.requestPaused" => {
         let sender = sender.clone();

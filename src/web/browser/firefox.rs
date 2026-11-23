@@ -4,12 +4,13 @@
 //!
 //! Each start copies his profile (the `copy` module) and runs Firefox on the copy alone, on a private display,
 //! behind the guard's proxy, told through the copy's own user file to send everything through it. A snap's
-//! Firefox is started inside a user scope of the snap's name, made through the user's service manager, since its
-//! launcher would otherwise ask the session bus for one; the bus is cut only inside it. The browser is driven
-//! over WebDriver BiDi on a loopback port it chooses and announces: every request a page makes is held until
-//! the guard has passed it, and the mark an automated browser shows its pages is hidden from them before their
-//! own scripts run. The snap's privileged launcher drops the parent-death signal, so a watcher beside it kills
-//! Firefox's process group once the process that started it is gone.
+//! Firefox is started inside a user scope of the snap's name, made through the user's service manager in the
+//! user's own runtime folder whatever the caller's session holds, since its launcher would otherwise ask the
+//! session bus for one; the bus is cut only inside it. The browser is driven over WebDriver BiDi on a loopback
+//! port it chooses and announces: every request a page makes is held until the guard has passed it, and the
+//! mark an automated browser shows its pages is hidden from them before their own scripts run. The snap's
+//! privileged launcher drops the parent-death signal, so a watcher beside it kills Firefox's process group once
+//! the process that started it is gone.
 //!
 //! No maintained Rust client of WebDriver BiDi stands to build on, so its commands are written here as the JSON
 //! objects the specification defines, over the same connection the DevTools protocol uses.
@@ -27,8 +28,8 @@ use tokio::process::{Child, ChildStdin, Command};
 use tokio::task::JoinHandle;
 
 use super::{
-  Answer, DocumentResponse, Gesture, PageWatch, Product, Running, UrlGuard, copy, display, fails_the_page,
-  is_web, locked, navigation_failure, places, profile, proxy, remote,
+  Answer, DocumentResponse, Gesture, PageWatch, Product, Running, UrlGuard, accepts_dialog, copy, display,
+  fails_the_page, is_web, locked, navigation_failure, places, profile, proxy, remote,
 };
 use crate::web::clock::now_ms;
 use crate::web::error::{Failure, WebError, WebResult};
@@ -40,20 +41,25 @@ const ANNOUNCED: &str = "WebDriver BiDi listening on ";
 /// browser answers it.
 const UNMARKED: &str = "() => { Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false, configurable: true }); }";
 
-/// The events the browser is asked for: each request's start, end and failure, and each navigation's start,
-/// load, failure and turn into a download.
-const EVENTS: [&str; 7] = [
+/// The events the browser is asked for: each request's start, end and failure, each navigation's start, commit,
+/// load, failure and turn into a download, and each dialog a page opens.
+const EVENTS: [&str; 9] = [
   "network.beforeRequestSent",
   "network.responseCompleted",
   "network.fetchError",
   "browsingContext.navigationStarted",
+  "browsingContext.navigationCommitted",
   "browsingContext.load",
   "browsingContext.navigationFailed",
   "browsingContext.downloadWillBegin",
+  "browsingContext.userPromptOpened",
 ];
 
 /// What a request's failure says where another navigation took its place, which is no failure of the page.
 const SUPERSEDED: &str = "NS_BINDING_ABORTED";
+
+/// How often a navigation's wait asks the tab whether the document standing in it has loaded.
+const TAB_LOOK_MS: u64 = 250;
 
 /// How long the page's network stands quiet before it has come to rest.
 const QUIET_MS: u64 = 500;
@@ -146,19 +152,33 @@ pub fn launch_environment(
   ]
 }
 
+/// The runtime folder of the user this process runs as, where that user's service manager and session bus
+/// listen whatever the caller's own session holds.
+pub fn user_runtime() -> PathBuf {
+  // SAFETY: `getuid` reads the calling process's real user id and cannot fail.
+  let uid = unsafe { libc::getuid() };
+
+  PathBuf::from(format!("/run/user/{uid}"))
+}
+
 /// The command line Firefox is started with on the copy at `profile`: in a user scope named `{scope}-{unique}`
-/// where a scope is named, with the environment given and no other, with no remote of its own and a loopback
-/// WebDriver BiDi endpoint on a port it chooses itself.
+/// where a scope is named, asked of the service manager in the user's runtime folder `runtime` through the
+/// bus there, with the environment given and no other, with no remote of its own and a loopback WebDriver
+/// BiDi endpoint on a port it chooses itself.
 pub fn launch_line(
   firefox: &str,
   scope: &str,
   unique: &str,
+  runtime: &Path,
   environment: &[(String, String)],
   profile: &Path,
 ) -> Vec<String> {
   let mut line = Vec::new();
 
   if !scope.is_empty() {
+    line.push("env".to_owned());
+    line.push(format!("XDG_RUNTIME_DIR={}", runtime.display()));
+    line.push(format!("DBUS_SESSION_BUS_ADDRESS=unix:path={}", runtime.join("bus").display()));
     line.extend(["systemd-run", "--user", "--scope", "--quiet", "--collect"].map(str::to_owned));
     line.push(format!("--unit={scope}-{unique}"));
     line.push("--".to_owned());
@@ -171,6 +191,29 @@ pub fn launch_line(
   line.push(profile.display().to_string());
   line.extend(["--remote-debugging-port", "0", "about:blank"].map(str::to_owned));
   line
+}
+
+/// What a start says of a Firefox that ended before it announced its endpoint: that it did, and the last line it
+/// or its launcher wrote, cut to a line's length, where one was written.
+pub fn ended_before_listening(last: &str) -> String {
+  const SAID_CHARS: usize = 300;
+
+  match last.trim() {
+    "" => "Firefox ended before it listened".to_owned(),
+    said => format!(
+      "Firefox ended before it listened: {}",
+      said.chars().take(SAID_CHARS).collect::<String>()
+    ),
+  }
+}
+
+/// The answer to a dialog a page opened, as `browsingContext.handleUserPrompt` takes it for the context the
+/// opening event names: accepted or dismissed as `accepts_dialog` says of its kind.
+pub fn prompt_answer(opened: &Value) -> Value {
+  json!({
+    "context": opened["context"],
+    "accept": accepts_dialog(opened["type"].as_str().unwrap_or_default()),
+  })
 }
 
 /// A value as WebDriver BiDi writes one, as plain JSON: strings, numbers, booleans, arrays and objects as they
@@ -238,6 +281,8 @@ struct Traffic {
   // replaces as failed.
   navigation: Mutex<Option<String>>,
   arrived: std::sync::atomic::AtomicBool,
+  // Whether the navigation last begun in the main tab has committed its document to the tab.
+  committed: std::sync::atomic::AtomicBool,
   quiet: Quiet,
   load: tokio::sync::watch::Sender<Load>,
 }
@@ -249,6 +294,7 @@ impl Traffic {
       context: Mutex::default(),
       navigation: Mutex::default(),
       arrived: std::sync::atomic::AtomicBool::new(false),
+      committed: std::sync::atomic::AtomicBool::new(false),
       quiet: Quiet::default(),
       load: tokio::sync::watch::Sender::new(Load::Loaded),
     }
@@ -258,6 +304,19 @@ impl Traffic {
     let main = locked(&self.context).clone();
 
     main.is_some() && params["context"].as_str() == main.as_deref()
+  }
+
+  // The navigation under way recorded as loaded, where it is still loading.
+  fn loaded(&self) {
+    self.load.send_if_modified(|load| {
+      let loading = *load == Load::Loading;
+
+      if loading {
+        *load = Load::Loaded;
+      }
+
+      loading
+    });
   }
 
   // Whether an event is of the navigation standing in the main tab.
@@ -317,20 +376,14 @@ impl Traffic {
       "browsingContext.navigationStarted" if self.main(params) => {
         *locked(&self.navigation) = params["navigation"].as_str().map(str::to_owned);
         self.arrived.store(false, Ordering::SeqCst);
+        self.committed.store(false, Ordering::SeqCst);
         self.load.send_replace(Load::Loading);
       }
-      // An error page loads after its navigation failed, and the failure stands.
-      "browsingContext.load" if self.main(params) => {
-        self.load.send_if_modified(|load| {
-          let loading = *load == Load::Loading;
-
-          if loading {
-            *load = Load::Loaded;
-          }
-
-          loading
-        });
+      "browsingContext.navigationCommitted" if self.current(params) => {
+        self.committed.store(true, Ordering::SeqCst);
       }
+      // An error page loads after its navigation failed, and the failure stands.
+      "browsingContext.load" if self.main(params) => self.loaded(),
       "browsingContext.navigationFailed"
         if self.current(params) && !self.arrived.load(Ordering::SeqCst) =>
       {
@@ -340,6 +393,11 @@ impl Traffic {
         self.load.send_replace(Load::Failed(
           "the address is a download, which a browser does not show".to_owned(),
         ));
+      }
+      // A dialog left standing holds the page's scripts and every answer to the read.
+      "browsingContext.userPromptOpened" => {
+        self.page.dialog_opened(params["message"].as_str());
+        sender.tell("browsingContext.handleUserPrompt", prompt_answer(params));
       }
       _ => {}
     }
@@ -381,6 +439,7 @@ pub struct Firefox {
   profiles: PathBuf,
   owner: PathBuf,
   scope: String,
+  runtime: PathBuf,
 }
 
 impl Firefox {
@@ -408,6 +467,7 @@ impl Firefox {
 
     Some(Self {
       scope: snap_scope(&firefox),
+      runtime: user_runtime(),
       firefox,
       profiles,
       owner,
@@ -493,6 +553,7 @@ impl Firefox {
       &self.firefox,
       &self.scope,
       &format!("{:016x}", rand::random::<u64>()),
+      &self.runtime,
       &environment,
       folder,
     );
@@ -538,22 +599,30 @@ impl Firefox {
     }
 
     // Firefox names its endpoint once it listens, after it has brought the copy up; its output is read until it
-    // does, or until it ends, and the rest of it read away so it never stands on a full pipe.
+    // does, or until it ends, and the rest of it read away so it never stands on a full pipe. The last line it
+    // or its launcher wrote before it ended names why it did.
     let Some(output) = output else {
       return Err(Box::new(launch.failed(unavailable("Firefox's output could not be read".to_owned()))));
     };
     let mut lines = tokio::io::BufReader::new(output).split(b'\n');
     let mut endpoint = None;
+    let mut last = String::new();
 
     while let Ok(Some(line)) = lines.next_segment().await {
-      if let Some(announced) = String::from_utf8_lossy(&line).trim().strip_prefix(ANNOUNCED) {
+      let line = String::from_utf8_lossy(&line).trim().to_owned();
+
+      if let Some(announced) = line.strip_prefix(ANNOUNCED) {
         endpoint = Some(announced.to_owned());
         break;
+      }
+
+      if !line.is_empty() {
+        last = line;
       }
     }
 
     let Some(endpoint) = endpoint else {
-      return Err(Box::new(launch.failed(unavailable("Firefox ended before it listened".to_owned()))));
+      return Err(Box::new(launch.failed(unavailable(ended_before_listening(&last)))));
     };
 
     launch.output =
@@ -673,6 +742,25 @@ impl FirefoxRunning {
   fn traffic(&self) -> &Traffic {
     self.launch.traffic.as_ref().expect("a running Firefox holds what it watches")
   }
+
+  // Asks the tab a few times a second, once the navigation's document has committed, whether the document
+  // standing in it has loaded, and records one that has as its load would be. A page whose script sends its tab
+  // back through its history before the page has loaded leaves Firefox firing no load for the tab at all.
+  async fn loaded_in_tab(&self) {
+    let traffic = self.traffic();
+
+    loop {
+      tokio::time::sleep(std::time::Duration::from_millis(TAB_LOOK_MS)).await;
+
+      if traffic.committed.load(Ordering::SeqCst)
+        && let Ok(state) = self.evaluate("document.readyState").await
+        && state == "complete"
+      {
+        traffic.loaded();
+        return;
+      }
+    }
+  }
 }
 
 impl Running for FirefoxRunning {
@@ -713,6 +801,7 @@ impl Running for FirefoxRunning {
         },
         ended = remote::event_where(&mut events, |_, _| false) => ended.map(|_| ()),
         () = page.blocked_now.notified() => Ok(()),
+        () = self.loaded_in_tab() => Ok(()),
       }
     })
   }
