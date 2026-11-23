@@ -1,0 +1,39 @@
+# What installing the explorer on a fresh machine needs, read by the testbed's install verb (bmo-testbed's
+# docs/install.md, "The install declaration"). The repository runs no service and listens on no port: a deployment
+# places its web tools with the tool host and links its unit command beside `bmo`, so the tool host and the
+# command line stand before it. It reads no settings file (docs/api.md, "Settings and data"); its store is made
+# under the data root's `explorer/` as it is first opened (docs/store.md). Its picture reading during a challenge
+# asks the model gateway at its default address with the gateway's own key, `env/llm-gateway.key`, which agency's
+# declaration makes; with no key the challenge loop reads no picture.
+
+install = 1
+
+[[needs]]
+program = "cargo"
+what = "Rust's Cargo, which a deployment builds the unit command, the web tools and the web helper with: `curl https://sh.rustup.rs -sSf | sh`."
+
+[[needs]]
+program = "cc"
+what = "A C compiler, which builds the SQLite the store is bundled with: the `build-essential` package."
+
+# The real browser a read falls back to: the person's own Firefox where its snap and a default profile stand,
+# else standard Chrome at its stable channel's path (docs/web-access.md, "Which browser").
+[[needs]]
+check = 'test -x /usr/bin/google-chrome || { test -x /snap/bin/firefox && test -f "$HOME/snap/firefox/common/.mozilla/firefox/profiles.ini"; }'
+what = "A real browser for pages a direct read cannot get: Google Chrome stable at /usr/bin/google-chrome, from https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb, or the Firefox snap opened once so its default profile stands."
+
+[[needs]]
+check = "test -x /usr/bin/Xvfb"
+what = "Xvfb, the private virtual screen every browser the web tools start draws on, at /usr/bin/Xvfb: the `xvfb` package."
+
+[[needs]]
+check = "test -x /usr/bin/setpriv"
+what = "setpriv, which binds the virtual screen's life to the process that started it, at /usr/bin/setpriv: the `util-linux` package."
+
+[[needs]]
+program = "pdftotext"
+what = "Poppler's pdftotext, which reads a PDF a page answers with as its text: the `poppler-utils` package."
+
+[[needs]]
+program = "systemd-run"
+what = "systemd's user manager, through which a snap's Firefox is started in a scope of its own: the `systemd` package."
