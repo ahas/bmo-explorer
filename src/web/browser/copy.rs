@@ -203,15 +203,70 @@ fn copy_file(from: &Path, into: &Path) -> Result<(), String> {
     .map_err(|why| format!("{} could not be copied: {why}", from.display()))
 }
 
-/// A copy's folder removed with every process still opened on it, where `is_copy` takes it; whether it is gone.
-/// Any other folder is left as it stands.
-pub async fn remove(folder: &Path, profiles: &Path, owner: &Path, control: &dyn ProcessControl) -> bool {
-  is_copy(folder, profiles, owner) && profile::remove(folder, control).await
+/// The cache root Firefox mirrors a profile standing in `profiles` into: a profile under its profiles root
+/// `<home>/.mozilla/firefox` keeps its local data — the startup cache, the safe-browsing lists, thumbnails — in
+/// the folder of the same path under `<home>/.cache/mozilla/firefox`, whatever its preferences say, and a snap's
+/// Firefox takes its own `<home>` and no `XDG_CACHE_HOME` from the caller. None where `profiles` is no such
+/// root, as no folder is mirrored then.
+pub fn cache_root(profiles: &Path) -> Option<PathBuf> {
+  let mozilla = profiles.parent()?;
+
+  if profiles.file_name()? != "firefox" || mozilla.file_name()? != ".mozilla" {
+    return None;
+  }
+
+  Some(mozilla.parent()?.join(".cache/mozilla/firefox"))
 }
 
-/// Every copy in `profiles` whose owning process is gone, or that stands unowned past an hour, removed.
+/// The folder Firefox mirrors the copy `folder` into, where the copy is one and `profiles` mirrors at all.
+pub fn mirror_of(folder: &Path, profiles: &Path, owner: &Path) -> Option<PathBuf> {
+  if !is_copy(folder, profiles, owner) {
+    return None;
+  }
+
+  Some(cache_root(profiles)?.join(folder.file_name()?))
+}
+
+/// The copy's mirror in the cache root removed, where there is one.
+fn remove_mirror(folder: &Path, profiles: &Path, owner: &Path) {
+  if let Some(mirror) = mirror_of(folder, profiles, owner).filter(|mirror| mirror.is_dir()) {
+    let _ = std::fs::remove_dir_all(mirror);
+  }
+}
+
+/// A copy's folder removed with every process still opened on it, and its mirror in the cache root with it,
+/// where `is_copy` takes it; whether the copy is gone. Any other folder is left as it stands.
+pub async fn remove(folder: &Path, profiles: &Path, owner: &Path, control: &dyn ProcessControl) -> bool {
+  let gone = is_copy(folder, profiles, owner) && profile::remove(folder, control).await;
+
+  if gone {
+    remove_mirror(folder, profiles, owner);
+  }
+
+  gone
+}
+
+/// Every copy in `profiles` whose owning process is gone, or that stands unowned past an hour, removed with its
+/// mirror; and every mirror in the cache root named as a copy whose copy no longer stands, past an hour old,
+/// removed too, as a run killed between the two leaves it.
 pub async fn reap_stale(profiles: &Path, owner: &Path, now_ms: u64, control: &dyn ProcessControl) {
   let ours = |path: &Path| is_copy(path, profiles, owner);
 
-  profile::reap_stale_where(profiles, &ours, now_ms, control).await;
+  for reaped in profile::reap_stale_where(profiles, &ours, now_ms, control).await {
+    remove_mirror(&reaped, profiles, owner);
+  }
+
+  let Some(root) = cache_root(profiles) else {
+    return;
+  };
+
+  for mirror in std::fs::read_dir(&root).into_iter().flatten().flatten().map(|entry| entry.path()) {
+    let copy = mirror.file_name().map(|name| profiles.join(name));
+
+    if copy.is_some_and(|copy| is_copy(&copy, profiles, owner) && !copy.exists())
+      && profile::older_than_an_hour(&mirror, now_ms)
+    {
+      let _ = std::fs::remove_dir_all(&mirror);
+    }
+  }
 }

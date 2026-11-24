@@ -140,16 +140,26 @@ pub async fn reap_stale(dir: &Path, now_ms: u64, control: &dyn ProcessControl) {
   reap_stale_where(dir, &chrome, now_ms, control).await;
 }
 
+/// Whether the folder at `path` was last changed an hour or more before `now_ms`.
+pub fn older_than_an_hour(path: &Path, now_ms: u64) -> bool {
+  std::fs::metadata(path)
+    .and_then(|meta| meta.modified())
+    .ok()
+    .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
+    .is_some_and(|at| now_ms.saturating_sub(at.as_millis() as u64) >= STALE_UNOWNED_MS)
+}
+
 /// Every folder in `dir` that `ours` takes for a browser profile of this layer's, whose owner is gone or that
-/// stands unowned past an hour, removed; no other folder is looked at.
+/// stands unowned past an hour, removed; no other folder is looked at. The folders removed are answered.
 pub async fn reap_stale_where(
   dir: &Path,
   ours: &(dyn Fn(&Path) -> bool + Sync),
   now_ms: u64,
   control: &dyn ProcessControl,
-) {
+) -> Vec<PathBuf> {
+  let mut removed = Vec::new();
   let Ok(entries) = std::fs::read_dir(dir) else {
-    return;
+    return removed;
   };
   let profiles: Vec<PathBuf> =
     entries.flatten().map(|entry| entry.path()).filter(|path| ours(path)).collect();
@@ -160,15 +170,13 @@ pub async fn reap_stale_where(
       .map(|text| text.trim().parse::<i32>().unwrap_or(0));
     let stale = match owner {
       Some(pid) => pid <= 1 || !alive(pid),
-      None => std::fs::metadata(&profile)
-        .and_then(|meta| meta.modified())
-        .ok()
-        .and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok())
-        .is_some_and(|at| now_ms.saturating_sub(at.as_millis() as u64) >= STALE_UNOWNED_MS),
+      None => older_than_an_hour(&profile, now_ms),
     };
 
-    if stale {
-      remove(&profile, control).await;
+    if stale && remove(&profile, control).await {
+      removed.push(profile);
     }
   }
+
+  removed
 }

@@ -100,6 +100,7 @@ fn the_copy_is_told_to_send_everything_through_the_proxy_and_keep_its_cache_and_
     "user_pref(\"network.proxy.failover_direct\", false);",
     "user_pref(\"network.trr.mode\", 5);",
     "user_pref(\"media.peerconnection.ice.proxy_only\", true);",
+    "user_pref(\"browser.cache.disk.enable\", false);",
     "user_pref(\"browser.cache.disk.parent_directory\", \"/srv/profiles/.bmo-web-firefox-1/cache\");",
     "user_pref(\"browser.download.folderList\", 2);",
     "user_pref(\"browser.download.dir\", \"/srv/profiles/.bmo-web-firefox-1/downloads\");",

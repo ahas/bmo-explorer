@@ -52,7 +52,32 @@ fn contents(root: &Path) -> BTreeMap<String, Vec<u8>> {
 // A profiles' folder holding one profile with a little of everything a used profile holds.
 fn profiles_with_owner() -> (tempfile::TempDir, PathBuf) {
   let profiles = tempfile::tempdir().unwrap();
-  let owner = profiles.path().join("abcd1234.default");
+  let owner = owner_in(profiles.path());
+
+  (profiles, owner)
+}
+
+// A home folder whose Firefox keeps its profiles in `.mozilla/firefox`, holding the owner's profile as
+// `profiles_with_owner` does, and its cache root `.cache/mozilla/firefox` the owner's profile's own cache: the
+// home, the profiles' folder, the owner's profile and the cache root.
+fn home_with_owner() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
+  let home = tempfile::tempdir().unwrap();
+  let profiles = home.path().join(".mozilla/firefox");
+  let cache = home.path().join(".cache/mozilla/firefox");
+
+  std::fs::create_dir_all(&profiles).unwrap();
+  std::fs::create_dir_all(cache.join("abcd1234.default/startupCache")).unwrap();
+  std::fs::write(cache.join("abcd1234.default/startupCache/startupCache.8.little"), "his").unwrap();
+
+  let owner = owner_in(&profiles);
+
+  (home, profiles, owner, cache)
+}
+
+// The owner's profile, with a little of everything a used profile holds, made in `profiles` with the
+// `profiles.ini` naming it.
+fn owner_in(profiles: &Path) -> PathBuf {
+  let owner = profiles.join("abcd1234.default");
   let files = [
     "cookies.sqlite",
     "cookies.sqlite-wal",
@@ -81,12 +106,12 @@ fn profiles_with_owner() -> (tempfile::TempDir, PathBuf) {
 
   std::os::unix::fs::symlink("127.0.0.1:+4242", owner.join("lock")).unwrap();
   std::fs::write(
-    profiles.path().join("profiles.ini"),
+    profiles.join("profiles.ini"),
     "[Profile0]\nName=default\nIsRelative=1\nPath=abcd1234.default\nDefault=1\n\n[General]\nStartWithLastProfile=1\n",
   )
   .unwrap();
 
-  (profiles, owner)
+  owner
 }
 
 #[test]
@@ -170,4 +195,78 @@ async fn removal_and_reclaim_never_reach_the_owners_profile() {
 
   assert!(!left.exists());
   assert_eq!(contents(&owner), before);
+}
+
+#[test]
+fn firefox_mirrors_a_profile_of_its_profiles_root_into_the_cache_root_beside_it() {
+  let snap = Path::new("/home/someone/snap/firefox/common");
+
+  assert_eq!(cache_root(&snap.join(".mozilla/firefox")), Some(snap.join(".cache/mozilla/firefox")));
+  assert_eq!(cache_root(Path::new("/tmp/profiles")), None);
+  assert_eq!(
+    mirror_of(
+      &snap.join(".mozilla/firefox/.bmo-web-firefox-1"),
+      &snap.join(".mozilla/firefox"),
+      &snap.join(".mozilla/firefox/abcd1234.default")
+    ),
+    Some(snap.join(".cache/mozilla/firefox/.bmo-web-firefox-1"))
+  );
+  assert_eq!(
+    mirror_of(
+      &snap.join(".mozilla/firefox/abcd1234.default"),
+      &snap.join(".mozilla/firefox"),
+      &snap.join(".mozilla/firefox/abcd1234.default")
+    ),
+    None,
+    "the owner's profile is no copy, so its cache is no copy's mirror"
+  );
+}
+
+#[tokio::test]
+async fn a_removed_copy_takes_its_mirror_in_the_cache_root_with_it_and_leaves_the_owners_cache() {
+  let (_home, profiles, owner, cache) = home_with_owner();
+  let owners_cache = contents(&cache.join("abcd1234.default"));
+  let copy = make(&owner, &profiles, &NoProcesses).await.unwrap();
+  let mirror = cache.join(copy.file_name().unwrap());
+
+  std::fs::create_dir_all(mirror.join("startupCache")).unwrap();
+  std::fs::write(mirror.join("startupCache/startupCache.8.little"), "the copy's").unwrap();
+
+  assert!(remove(&copy, &profiles, &owner, &NoProcesses).await);
+  assert!(!copy.exists());
+  assert!(!mirror.exists(), "the copy's mirror went with it");
+  assert_eq!(contents(&cache.join("abcd1234.default")), owners_cache);
+}
+
+#[tokio::test]
+async fn reclaim_takes_a_killed_runs_mirror_and_an_hour_old_orphan_mirror_and_nothing_else() {
+  let (_home, profiles, owner, cache) = home_with_owner();
+  let owners_cache = contents(&cache.join("abcd1234.default"));
+  let killed = profiles.join(".bmo-web-firefox-killed");
+  let orphan = cache.join(".bmo-web-firefox-orphan");
+  let other = cache.join("other.default");
+
+  std::fs::create_dir(&killed).unwrap();
+  std::fs::write(killed.join(OWNER_FILE), "1\n").unwrap();
+
+  for mirror in [&cache.join(".bmo-web-firefox-killed"), &orphan, &other] {
+    std::fs::create_dir_all(mirror.join("startupCache")).unwrap();
+  }
+
+  // Just made, the orphan is not yet past the hour; the killed run's copy and its mirror go at once.
+  let now_ms =
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+
+  reap_stale(&profiles, &owner, now_ms, &NoProcesses).await;
+
+  assert!(!killed.exists());
+  assert!(!cache.join(".bmo-web-firefox-killed").exists());
+  assert!(orphan.exists());
+
+  reap_stale(&profiles, &owner, u64::MAX, &NoProcesses).await;
+
+  assert!(!orphan.exists(), "an orphan mirror past the hour is reclaimed");
+  assert!(other.exists(), "a folder of another name is never looked at");
+  assert_eq!(contents(&cache.join("abcd1234.default")), owners_cache);
+  assert!(owner.exists());
 }

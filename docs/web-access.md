@@ -254,9 +254,15 @@
   chooses and announces.
   - The copy is made in a new folder named `.bmo-web-firefox-` and a random suffix inside the profiles'
     folder, readable by a snap's Firefox, made by this process alone and holding the starting process's id.
-  - Its `user.js` is this start's own: the network path below, its cache and every download kept inside the
-    copy so they are deleted with it and nothing lands in the owner's own download folder, no restore of a
-    session, no default-browser check, and its window behaving as focused, as a person's window does.
+  - Its `user.js` is this start's own: the network path below, its disk cache off and pointed inside the copy
+    and every download kept inside the copy so they are deleted with it and nothing lands in the owner's own
+    download folder, no restore of a session, no default-browser check, and its window behaving as focused,
+    as a person's window does.
+  - **Firefox mirrors the copy into its cache root.** A profile standing under Firefox's profiles root keeps
+    its local data — the startup cache, the safe-browsing lists, thumbnails — in a folder of the same name
+    under the cache root, `.cache/mozilla/firefox` beside the `.mozilla` that holds the profiles root (a
+    snap's beside its own); no preference moves it, and a snap's Firefox ignores `XDG_CACHE_HOME`. That
+    folder, by the copy's name, is removed with the copy.
   - An address that turns into a download fails the read, saying so: a browser shows no page for it.
   - A snap's Firefox is started in a user scope of the snap's own name made through the user's service
     manager, since its launcher would otherwise ask the session bus for one; the bus is cut only inside it.
@@ -414,7 +420,8 @@
     end of a pipe only the starting process writes to; when that process is gone the pipe closes, and the
     watcher kills Firefox's process group.
 - **Leftover profiles** are reclaimed by the next start, after it confirms the owner is not alive:
-  Chrome's in the temporary directory, Firefox's copies in the profiles' folder.
+  Chrome's in the temporary directory, Firefox's copies in the profiles' folder with their mirrors in the
+  cache root. A mirror whose copy no longer stands, past an hour old, is removed too.
 
 ### How a leftover profile is reclaimed
 
@@ -431,7 +438,8 @@
 - A browser helper that is shutting down must not recreate the deleted profile and leave it behind,
   which is what the second look is for.
 - Only a folder whose name carries this layer's own prefix is ever looked at, and the owner's profile is
-  refused by the same check as at the end above.
+  refused by the same check as at the end above; in the cache root, too, only a folder of the copies' prefix
+  is ever removed, so the owner's own profile's cache is never reached.
 
 ### When the browser meets a challenge
 

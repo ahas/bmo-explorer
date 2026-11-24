@@ -84,10 +84,10 @@ pub fn snap_scope(executable: &str) -> String {
 /// The preferences one start lays over the copy, as the lines of its user file: the remote agent's
 /// automation preferences left off, so the copy behaves as his own Firefox does; every request through the
 /// proxy on `proxy_port`, loopback included, with no direct connection to fail over to, no DNS over HTTPS, no
-/// name prefetching or speculative connection, and WebRTC through the proxy only; the cache and every download
-/// inside the copy at `folder`, so they go with it and nothing lands in the owner's own download folder; no
-/// session restored and no default-browser check; and its window, on a screen nobody looks at, behaving as
-/// focused, as a person's window does.
+/// name prefetching or speculative connection, and WebRTC through the proxy only; the disk cache off and, with
+/// every download, inside the copy at `folder`, so they go with it and nothing lands in the owner's own download
+/// folder; no session restored and no default-browser check; and its window, on a screen nobody looks at,
+/// behaving as focused, as a person's window does.
 pub fn start_preferences(proxy_port: u16, folder: &Path) -> String {
   let inside = |name: &str| Value::from(folder.join(name).to_string_lossy().into_owned());
   let (cache, downloads) = (inside("cache"), inside("downloads"));
@@ -111,6 +111,7 @@ pub fn start_preferences(proxy_port: u16, folder: &Path) -> String {
     "user_pref(\"network.http.speculative-parallel-limit\", 0);".to_owned(),
     "user_pref(\"browser.urlbar.speculativeConnect.enabled\", false);".to_owned(),
     "user_pref(\"media.peerconnection.ice.proxy_only\", true);".to_owned(),
+    "user_pref(\"browser.cache.disk.enable\", false);".to_owned(),
     format!("user_pref(\"browser.cache.disk.parent_directory\", {cache});"),
     "user_pref(\"browser.download.folderList\", 2);".to_owned(),
     format!("user_pref(\"browser.download.dir\", {downloads});"),
