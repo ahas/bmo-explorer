@@ -57,6 +57,7 @@ A change moves through three stages in order:
    the placed-site test under `tests/site-placed/`, which runs where `BMO_LIVE_TOOL_HOST` names an installed
    `mcp-host`.
 
-The version is the workspace's, `0.1.0-rev.<n>` until the first release, kept in `VERSION`; `docs/openapi.json` is
-written by `cargo run -- openapi`. `testbed.toml` is the testbed's declaration: how
+The version is the set's, read off the git tag when a build is made and handed to it as `BMO_VERSION` (bmo-chat's
+`docs/conventions.md`, 「Versions」); the workspace manifest's version is a placeholder that never moves.
+`docs/openapi.json` is written by `cargo run -- openapi`. `testbed.toml` is the testbed's declaration: how
 it tests, checks, builds and deploys the repository.

@@ -15,7 +15,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(
   name = "bmo-explorer",
-  version,
+  version = bmo_explorer::VERSION,
   about = "Web reading: the MCP server and the contract document"
 )]
 struct Cli {

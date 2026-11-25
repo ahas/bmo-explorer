@@ -152,14 +152,6 @@ fn nested_twins(paths: &[String]) -> Vec<String> {
 }
 
 #[test]
-fn the_version_file_holds_the_workspaces_version() {
-  let version = text_of("VERSION").expect("VERSION is at the root");
-
-  assert_eq!(version.trim(), env!("CARGO_PKG_VERSION"));
-  assert_eq!(bmo_explorer::VERSION, version.trim());
-}
-
-#[test]
 fn only_the_cargo_manifest_at_the_root() {
   let found: Vec<String> = fs::read_dir(ROOT)
     .expect("the repository root is readable")

@@ -35,5 +35,6 @@ host's claims and calls to them.
 
 ## Version
 
-The workspace's version, in semver, is the repository's, kept in `VERSION` and the Cargo manifest. It moves only at a
-release the owner declares, and a commit or a deploy moves none (docs/api.md, 「Versioning」).
+The version is the set's, in semver, read off the git tag when a build is made; the Cargo manifest's version is a
+placeholder that never moves. It moves only at a release the owner declares, and a commit or a deploy moves none
+(docs/api.md, 「Versioning」).

@@ -40,5 +40,5 @@ fn the_document_states_the_seven_tools_the_plugin_and_no_route() {
   assert_eq!(document["x-calls"], serde_json::json!([]));
   assert_eq!(document["x-harness"]["mcp"], "bmo-explorer mcp");
   assert_eq!(document["x-harness"]["plugin"], "bmo-explorer");
-  assert_eq!(document["info"]["version"], bmo_explorer::VERSION);
+  assert_eq!(document["info"]["version"], env!("CARGO_PKG_VERSION"));
 }

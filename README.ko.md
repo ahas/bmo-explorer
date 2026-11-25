@@ -34,5 +34,5 @@ cargo fmt --all --check
 
 ## 버전
 
-워크스페이스의 버전(semver)이 곧 저장소의 버전이며, `VERSION`과 Cargo 매니페스트에 기록됩니다. 버전은 소유자가 선언한
-릴리스에서만 올라가며, 커밋이나 배포로는 바뀌지 않습니다(docs/api.md, 「Versioning」).
+버전은 세트 전체의 것(semver)이며 빌드할 때 git 태그에서 읽고, Cargo 매니페스트의 버전은 움직이지 않는 자리표시
+값입니다. 버전은 소유자가 선언한 릴리스에서만 올라가며, 커밋이나 배포로는 바뀌지 않습니다(docs/api.md, 「Versioning」).

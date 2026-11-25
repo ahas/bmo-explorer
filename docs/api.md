@@ -20,11 +20,12 @@ flowchart TD
 
 ## Versioning
 
-- **The repository has one version,** in `VERSION` and the Cargo manifest, which the MCP server's
-  `serverInfo`, the OpenAPI document and the harness plugin all answer.
+- **The version is the set's,** read off the git tag when a build is made and handed to the build as
+  `BMO_VERSION`, which the MCP server's `serverInfo` and `--version` answer. The Cargo manifest's version, the
+  OpenAPI document's and the harness plugin's are a placeholder that never moves.
 - **It is numbered and moved as bmo-chat's `docs/conventions.md` says (「Versions」):** only at a release the
-  owner declares — before the first release `0.1.0`, then `0.1.0-rev.<n>`, one revision a release — and a commit,
-  a deploy or a contract change moves none; a deployment is told apart by its commit.
+  owner declares, and a commit, a deploy or a contract change moves none; a deployment is told apart by its
+  commit.
 
 ## Settings and data
 

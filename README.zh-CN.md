@@ -32,5 +32,5 @@ cargo fmt --all --check
 
 ## 版本
 
-工作区的版本(semver)即仓库的版本,记录在 `VERSION` 和 Cargo 清单中。版本只在所有者宣布发布时才会变动,提交或部署都不会
-改变它(docs/api.md,「Versioning」)。
+版本属于整个套件(semver),在构建时从 git 标签读取,Cargo 清单中的版本只是永不变动的占位值。版本只在所有者宣布发布时
+才会变动,提交或部署都不会改变它(docs/api.md,「Versioning」)。

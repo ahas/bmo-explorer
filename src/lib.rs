@@ -13,5 +13,10 @@ pub mod tools;
 pub mod web;
 pub mod web_helper;
 
-/// The repository's version, which every contract it serves carries.
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+/// The version the MCP server and the command name: the set's version the build was made at, which the
+/// testbed hands the build as `BMO_VERSION`, else the manifest's placeholder (bmo-chat's
+/// `docs/conventions.md`, 「Versions」).
+pub const VERSION: &str = match option_env!("BMO_VERSION") {
+  Some(version) => version,
+  None => env!("CARGO_PKG_VERSION"),
+};
