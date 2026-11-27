@@ -18,6 +18,7 @@ the one service it calls is the research unit a research record names, for a res
 | `src/` | the repository's one crate, `bmo-explorer`, split into its modules: the client, the MCP server and the contract document, the forms a web read takes, the web layer, the site contract, the tool host's call protocol, the web helper's reading and the store |
 | `tests/` | every test, the checks that span the repository among them, and under `tests/site-placed/` the placed site tools held against an installed tool host |
 | `tools/` | the executables the tool host places, each with its manifest and schemas: `web_search`, `web_fetch`, `web_captcha`, `research`, `explorer`, and the shared web helper under `tools/_shared/web` |
+| `deploy/` | the line this service stands in every agent's brain, declared as it deploys |
 
 ## Build and test
 

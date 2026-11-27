@@ -16,6 +16,7 @@ MCP 服务器及其 `bmo-explorer` 技能、由工具宿主放置的网页工具
 | `src/` | 仓库唯一的 crate `bmo-explorer`,拆分为以下模块:客户端、MCP 服务器与契约文档、网页读取的各种形式、网页层、站点契约、工具宿主的调用协议、网页助手的读取以及存储 |
 | `tests/` | 全部测试,其中包括跨整个仓库的检查;`tests/site-placed/` 下是针对已安装工具宿主检验已放置站点工具的测试 |
 | `tools/` | 工具宿主放置的可执行文件及各自的清单和模式:`web_search`、`web_fetch`、`web_captcha`、`research`、`explorer`,以及位于 `tools/_shared/web` 的共享网页助手 |
+| `deploy/` | 本服务在每个代理的大脑中留下的一行，部署时声明 |
 
 ## 构建与测试
 
