@@ -133,7 +133,7 @@ Each tool is a folder of `tools/` with its own `tool.toml`, placed with the tool
 repository's own (`testbed.toml`, its deploy steps). A deployment waits for quiet before its flip (`testbed.toml`,
 `quiet`): the receiver's `quiet` command, run by its deployed path, says whether a chat turn or a research run stands
 under way that it would cut (the receiver's `docs/boundary-api.md`, 「The service and its commands」). The host's call protocol is the tool host's, as its API
-0.1.0-rev.2 states it (its `docs/api.md`, 「The call protocol」); every tool here speaks version 1 of it.
+states it (its `docs/api.md`, 「The call protocol」); every tool here speaks version 1 of it.
 
 | Folder | Entry | Capability | What it does |
 |---|---|---|---|

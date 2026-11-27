@@ -311,7 +311,7 @@ dependencies = [
 
 [[package]]
 name = "bmo-explorer"
-version = "0.1.0-rev.5"
+version = "0.0.0"
 dependencies = [
  "avif-parse",
  "axum",
@@ -899,7 +899,7 @@ dependencies = [
 
 [[package]]
 name = "explorer-tool"
-version = "0.1.0-rev.5"
+version = "0.0.0"
 dependencies = [
  "bmo-explorer",
  "tokio",
@@ -2611,7 +2611,7 @@ dependencies = [
 
 [[package]]
 name = "research-tool"
-version = "0.1.0-rev.5"
+version = "0.0.0"
 dependencies = [
  "bmo-explorer",
  "tokio",
@@ -3934,7 +3934,7 @@ dependencies = [
 
 [[package]]
 name = "web-captcha-tool"
-version = "0.1.0-rev.5"
+version = "0.0.0"
 dependencies = [
  "bmo-explorer",
  "tokio",
@@ -3942,7 +3942,7 @@ dependencies = [
 
 [[package]]
 name = "web-fetch-tool"
-version = "0.1.0-rev.5"
+version = "0.0.0"
 dependencies = [
  "bmo-explorer",
  "tokio",
@@ -3950,7 +3950,7 @@ dependencies = [
 
 [[package]]
 name = "web-helper"
-version = "0.1.0-rev.5"
+version = "0.0.0"
 dependencies = [
  "bmo-explorer",
  "serde_json",
@@ -3959,7 +3959,7 @@ dependencies = [
 
 [[package]]
 name = "web-search-tool"
-version = "0.1.0-rev.5"
+version = "0.0.0"
 dependencies = [
  "bmo-explorer",
  "tokio",
