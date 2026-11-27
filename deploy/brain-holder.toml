@@ -3,7 +3,7 @@
 held_by = "explorer"
 
 [[memory]]
-key = "when"
+key = "explorer.when"
 type = "tip"
 recall_condition = "facts from the web, or a page to read"
 text = "Search with explorer_web_search, read the hits with explorer_web_fetch, and cite only pages read."
