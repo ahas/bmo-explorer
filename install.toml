@@ -9,10 +9,12 @@
 install = 1
 
 [[needs]]
+build = true
 program = "cargo"
 what = "Rust's Cargo, which a deployment builds the unit command, the web tools and the web helper with: `curl https://sh.rustup.rs -sSf | sh`."
 
 [[needs]]
+build = true
 program = "cc"
 what = "A C compiler, which builds the SQLite the store is bundled with: the `build-essential` package."
 
